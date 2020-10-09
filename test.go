@@ -4,7 +4,7 @@ import (
     "fmt"
     "github.com/google/gopacket"
     "github.com/google/gopacket/layers"
-    "github.com/google/gopacket/pcap"
+	"github.com/google/gopacket/pcap"
     "log"
     "strings"
     "time"
@@ -70,7 +70,49 @@ func printPacketInfo(packet gopacket.Packet) {
     }
 
 
-
+    //check if packet is UDP
+    udpLayer := packet.Layer(layers.LayerTypeUDP)
+    if udpLayer != nil {
+	    fmt.Println("UDP layer detected.") 
+	    udp, _ := udpLayer.(*layers.UDP)
+	    
+	    fmt.Printf("From port %d to %d\n", udp.SrcPort, udp.DstPort)
+	    fmt.Println("Checksum: ", udp.Checksum)
+	    networkLayer := packet.NetworkLayer()
+	    err = udp.SetNetworkLayerForChecksum(networkLayer)
+	    if err != nil {
+		    fmt.Println("SETTING NETWORK LAYER FOR CHECKSUM RESULTED IN ERROR: ", err)
+	    }else{
+		    
+		//payload := networkLayer.LayerPayload()
+		
+		buffer := gopacket.NewSerializeBuffer()
+		options := gopacket.SerializeOptions{
+			ComputeChecksums: true,
+			FixLengths:       true,
+		}	
+		
+		err := udp.SerializeTo(buffer, options)
+		if err != nil {
+			fmt.Println("ERROR SERIALIZING UDP PACKET: ", err)
+		}else {
+			header := buffer.Bytes()
+			headerAndPayload := append(header, udpLayer.LayerPayload()...)
+			ip := networkLayer.(*layers.IPv4)
+			headerProtocol := ip.Protocol
+			csum, err := udpChecksum(headerAndPayload, headerProtocol, ip)
+			if err != nil {
+				fmt.Println("Error computing checksum: ", err)
+			}else {
+				fmt.Println("Calculated checksum: ", csum)
+			}	
+			
+		}
+	    }
+		
+	    fmt.Println()
+	
+    }
 
     // Iterate over all layers, printing out each layer type
     fmt.Println("All packet layers:")
@@ -97,19 +139,20 @@ func printPacketInfo(packet gopacket.Packet) {
         fmt.Println("Error decoding some part of the packet:", err)
     }
 }
-/*
-func (ip *IPv4) psuedoheaderChecksum() (csum uint32, err error) {
+
+
+func psuedoheaderChecksum4(ip *layers.IPv4) (csum uint32, err error) {
      if err := ip.AddressTo4(); err != nil {
      	return 0, err
      }
-     csum += (uint32(ip.SrcIP[0]) + uint32(ip.srcIP[2])) << 8;
+     csum += (uint32(ip.SrcIP[0]) + uint32(ip.SrcIP[2])) << 8;
      csum += uint32(ip.SrcIP[1]) + uint32(ip.SrcIP[3]);
      csum += (uint32(ip.DstIP[0]) + uint32(ip.DstIP[2])) << 8;
      csum += uint32(ip.DstIP[1]) + uint32(ip.DstIP[3]);
      return csum, nil;
 }
 
-func (ip *IPv6) psuedoheaderChecksum() (csum uint32, err error) {
+func psuedoheaderChecksum6(ip *layers.IPv6) (csum uint32, err error) {
      if err := ip.AddressTo16(); err != nil {
      	return 0, err
      }
@@ -140,29 +183,14 @@ func tcpipChecksum(data []byte, csum uint32) uint16 {
      return ^uint16(csum)
 }
 
-func (c * tcpipchecksum) computeChecksum(headerAndPayload []byte, headerProtocol IPProtocol) (uint16, error) {
-     if c.psuedoheader == nil {
-     	return 0, errors.New("TCP/IP layter 4 checksum cannot be computed without network layer... call SetNetworkLayerForChecksum to set which layer to use")
-     }
-     length := uint32(len(headerAndPayload))
-     csum, err := c.psuedoheader.psuedoheaderChecksum()
-     if err != nil {
-     	return 0, err
-     }
+func udpChecksum(headerAndPayload []byte, headerProtocol layers.IPProtocol, ip *layers.IPv4) (uint16, error) {
+	length := uint32(len(headerAndPayload))
+	csum, err := psuedoheaderChecksum4(ip)
+	if err != nil {
+		return 0, err
+	}
      csum += uint32(headerProtocol)
      csum += length & 0xffff
      csum += length >> 16
      return tcpipChecksum(headerAndPayload, csum), nil
 }
-
-func (i *tcpipchecksum) SetNetworkLayerForChecksum(l gopacket.NetworkLayer) error {
-     switch v := l.(type){
-     case *IPv4:
-     	  i.psuedoheader = v
-     case *IPv6:
-          i.psuedoheader = v
-     default:
-	  return fmt.Errorf("cannot use layer type %v for tcp checksum network layer", l.LayerType())
-     }
-     return nil
-}*/
