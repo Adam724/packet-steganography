@@ -45,7 +45,7 @@ func main() {
 
 func printPacketInfo(packet gopacket.Packet, handle *pcap.Handle) {
     // Let's see if the packet is TCP
-   /* tcpLayer := packet.Layer(layers.LayerTypeTCP)
+    tcpLayer := packet.Layer(layers.LayerTypeTCP)
     if tcpLayer != nil {
         fmt.Println("TCP layer detected.")
         tcp, _ := tcpLayer.(*layers.TCP)
@@ -69,7 +69,7 @@ func printPacketInfo(packet gopacket.Packet, handle *pcap.Handle) {
 	   }
 	}
         fmt.Println()
-    }*/
+    }
 
 
     //check if packet is UDP
