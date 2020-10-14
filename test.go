@@ -5,6 +5,7 @@ import (
     "github.com/google/gopacket"
     "github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
+	//"github.com/google/gopacket/pcapgo"
     "log"
     "strings"
     "time"
@@ -30,6 +31,7 @@ type tcpipPsuedoHeader interface {
 }
 
 func main() {
+	
     // Open device
     handle, err = pcap.OpenLive(device, snapshotLen, promiscuous, timeout)
     if err != nil {log.Fatal(err) }
@@ -37,13 +39,13 @@ func main() {
 
     packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
     for packet := range packetSource.Packets() {
-        printPacketInfo(packet)
+	    printPacketInfo(packet, handle)
     }
 }
 
-func printPacketInfo(packet gopacket.Packet) {
+func printPacketInfo(packet gopacket.Packet, handle *pcap.Handle) {
     // Let's see if the packet is TCP
-    tcpLayer := packet.Layer(layers.LayerTypeTCP)
+   /* tcpLayer := packet.Layer(layers.LayerTypeTCP)
     if tcpLayer != nil {
         fmt.Println("TCP layer detected.")
         tcp, _ := tcpLayer.(*layers.TCP)
@@ -67,7 +69,7 @@ func printPacketInfo(packet gopacket.Packet) {
 	   }
 	}
         fmt.Println()
-    }
+    }*/
 
 
     //check if packet is UDP
@@ -83,12 +85,10 @@ func printPacketInfo(packet gopacket.Packet) {
 	    if err != nil {
 		    fmt.Println("SETTING NETWORK LAYER FOR CHECKSUM RESULTED IN ERROR: ", err)
 	    }else{
-		    
-		//payload := networkLayer.LayerPayload()
 		
 		buffer := gopacket.NewSerializeBuffer()
 		options := gopacket.SerializeOptions{
-			ComputeChecksums: true,
+			ComputeChecksums: false,
 			FixLengths:       true,
 		}	
 		
@@ -96,8 +96,11 @@ func printPacketInfo(packet gopacket.Packet) {
 		if err != nil {
 			fmt.Println("ERROR SERIALIZING UDP PACKET: ", err)
 		}else {
-			header := buffer.Bytes()
-			headerAndPayload := append(header, udpLayer.LayerPayload()...)
+			udp.Checksum = 0
+			//headerAndPayload := udp.BaseLayer.Contents
+			headerAndPayload := append(buffer.Bytes(), udp.BaseLayer.Payload...)
+			headerAndPayload[6] = 0
+			headerAndPayload[7] = 0
 			ip := networkLayer.(*layers.IPv4)
 			headerProtocol := ip.Protocol
 			csum, err := udpChecksum(headerAndPayload, headerProtocol, ip)
@@ -105,6 +108,22 @@ func printPacketInfo(packet gopacket.Packet) {
 				fmt.Println("Error computing checksum: ", err)
 			}else {
 				fmt.Println("Calculated checksum: ", csum)
+				fmt.Println("networkLayer.LayerContents(): ", networkLayer.LayerContents())
+				//fmt.Println("udp.LayerContents(): ", udp.LayerContents())
+				//fmt.Println("headerAndPayload: ", headerAndPayload)
+				//fmt.Println("udp.Payload(): ", udp.BaseLayer.Payload)
+				//fmt.Printf("srcIP: %d destIP: %d\n", ip.SrcIP, ip.DstIP)
+				//fmt.Println("udp.Length: ", udp.Length )
+				//fmt.Println("ip.Protocol: ", uint8(headerProtocol))
+				fmt.Println(packet.Data())
+
+				//append a message to the raw packet data and send it
+				rawBytes := packet.Data()
+				rawBytes = append(rawBytes, "test message"...)
+				err = handle.WritePacketData(rawBytes)
+				if err != nil {
+					log.Fatal(err)
+				}
 			}	
 			
 		}
@@ -194,3 +213,32 @@ func udpChecksum(headerAndPayload []byte, headerProtocol layers.IPProtocol, ip *
      csum += length >> 16
      return tcpipChecksum(headerAndPayload, csum), nil
 }
+
+/*func calcChecksum(phdr []byte, packet []byte) uint16 {
+	var sum32 uint32 = sum16(packet) + sum16(phdr)
+
+	//convert uint32 to uint16 by repeatedly adding carries
+	for i := 0; sum32 > 131071; i++{
+		sum32 = ((sum32 & (((1 << 16) - 1) << 16) ) >> 16) + (sum32 & ((1 << 16) - 1))
+	}
+	fmt.Printf("%x\n", sum32)
+	fmt.Printf("%d", ^uint16(sum32))
+	return ^uint16(sum32)
+}
+
+func sum16(arr []byte) uint32{
+	var sum uint32 = 0
+	for i := 0; i < len(arr); i += 2{
+		b1 := uint16(arr[i])
+		var b2 uint16
+		if (i + 1) >= len(arr) {
+			b2 = 0
+		}else {
+			b2 = uint16(arr[i + 1])
+		}
+		
+		var twoByte uint16 = (b1 << 8) + b2
+		sum += uint32(twoByte)
+	}
+	return sum
+}*/
