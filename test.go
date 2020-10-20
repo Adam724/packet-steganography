@@ -117,12 +117,18 @@ func printPacketInfo(packet gopacket.Packet, handle *pcap.Handle) {
 				//fmt.Println("ip.Protocol: ", uint8(headerProtocol))
 				fmt.Println(packet.Data())
 
-				//append a message to the raw packet data and send it
 				rawBytes := packet.Data()
-				rawBytes = append(rawBytes, "test message"...)
-				err = handle.WritePacketData(rawBytes)
-				if err != nil {
-					log.Fatal(err)
+				//this is packet we modified and sent to ourselves
+				if udp.SrcPort == 41360 {
+					//print the appended message
+					fmt.Println(rawBytes[len(rawBytes) - 12:])
+				}else {
+					//append a message to the raw packet data and send it
+					rawBytes = append(rawBytes, "test message"...)
+					err = handle.WritePacketData(rawBytes)
+					if err != nil {
+						log.Fatal(err)
+					}
 				}
 			}	
 			
