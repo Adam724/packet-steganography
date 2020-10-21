@@ -1,86 +1,116 @@
 package main
 
 import (
-	"github.com/google/gopacket/pcap"
-	"fmt"
-	"log"
-	"net"
-	"time"
-	"strings"
+        "bufio"
+        "fmt"
+        "net"
+        "os"
+        "strings"
 	"strconv"
 )
 
-var (
-    device       string = "ens33"
-    snapshot_len int32  = 1024
-    promiscuous  bool   = false
-    err          error
-    timeout      time.Duration = 30 * time.Second
-    handle       *pcap.Handle
-)
-
-
 func main() {
-	// Open device
-	handle, err = pcap.OpenLive(device, snapshot_len, promiscuous, timeout)
-	if err != nil {log.Fatal(err) }
-	defer handle.Close()
+        arguments := os.Args
+        if len(arguments) == 1 {
+                fmt.Println("Please provide a host:port string")
+                return
+        }
+        CONNECT := arguments[1]
 
-	// Payload: 'test message' in ASCII
-	payload := []byte("test message")
+        s, err := net.ResolveUDPAddr("udp4", CONNECT)
+        c, err := net.DialUDP("udp4", nil, s)
+        if err != nil {
+                fmt.Println(err)
+                return
+        }
 
-	//set srcMAC and dstMAC in ethernet header. Will be the same if sending to same device
-	/*
-	srcMAC := getMacAddr()
-	ethHeader := []byte{0}
-	ethHeader = append(ethHeader, srcMAC)
-	ethHeader = append(ethHeader, srcMac)
-        */
+        fmt.Printf("The UDP server is %s\n", c.RemoteAddr().String())
+        defer c.Close()
+
 	
-	//version: 4, header length(in 4 byte words): 5, TOS: 0, Length: ?, identifier: ?, flags: 4,
-	//offset: 0, TTL: 64, protocol: 17 (udp), checksum: ?, srcIP: 127.0.0.1, dstIP: 127.0.0.1
-	ipHeader := []byte{45, 0, 0, 0, 33, 151, 4, 0, 0, 0, 64, 17, 0, 0, 127, 0, 0, 1, 127, 0, 0, 1}
 
-	//srcPort: 3000, dstPort: 8080, length: ?, checksum: ?
-	udpHeader := []byte{11, 184, 31, 144, 0, 0, 0, 0}
 
-	//construct raw packet from headers and payload and calculate length in bytes
-	packet := append(append(ipHeader, udpHeader...), payload...)
-	var length uint16 = uint16(len(packet))
-	high, low := split_uint16(length)
 
-	//set length field in udp and ip headers
-	udpHeader[4] = high
-	udpHeader[5] = low
-	ipHeader[3] = high
-	ipHeader[4] = low
+        for {
+                reader := bufio.NewReader(os.Stdin)
+                fmt.Print(">> ")
+                text, _ := reader.ReadString('\n')
+		
+		// Payload: 'test message' in ASCII
+		payload := []byte(text + "\n")
+		
+                
+		
 
-	//pseudoHeader for udp checksum. srcIP, dstIP, protocol, length
-	pseudoHeader := append(ipHeader[len(ipHeader) - 9:], 17)
-	pseudoHeader = append(pseudoHeader, ipHeader[3:5]...)
+		//set srcMAC and dstMAC in ethernet header. Will be the same if sending to same device
+	
+		//srcMAC := getMacAddr()
+		//ethHeader := []byte{0}
+		//ethHeader = append(ethHeader, srcMAC)
+		//ethHeader = append(ethHeader, srcMac)
+        
+	
+		//version: 4, header length(in 4 byte words): 5, TOS: 0, Length: ?, identifier: ?, flags: 4,
+		//offset: 0, TTL: 64, protocol: 17 (udp), checksum: ?, srcIP: 127.0.0.1, dstIP: 127.0.0.1
+		ipHeader := []byte{45, 0, 0, 0, 33, 151, 4, 0, 0, 0, 64, 17, 0, 0, 127, 0, 0, 1, 127, 0, 0, 1}
 
-	//calculate and set udp checksum
-	data := append(udpHeader, payload...)
-	checksum := udpChecksum(pseudoHeader, data)
-	high, low = split_uint16(checksum)
+		//srcPort: 3000, dstPort: 8080, length: ?, checksum: ?
+		udpHeader := []byte{11, 184, 31, 144, 0, 0, 0, 0}
 
-	udpHeader[6] = high
-	udpHeader[7] = low
+		//construct raw packet from headers and payload and calculate length in bytes
+		packet := append(append(ipHeader, udpHeader...), payload...)
+		var length uint16 = uint16(len(packet))
+		high, low := split_uint16(length)
 
-	//calculate and set ip header checksum
-	checksum = ipChecksum(ipHeader)
-	high, low = split_uint16(checksum)
+		//set length field in udp and ip headers
+		udpHeader[4] = high
+		udpHeader[5] = low
+		ipHeader[3] = high
+		ipHeader[4] = low
 
-	ipHeader[12] = high
-	ipHeader[13] = low
+		//pseudoHeader for udp checksum. srcIP, dstIP, protocol, length
+		pseudoHeader := append(ipHeader[len(ipHeader) - 9:], 17)
+		pseudoHeader = append(pseudoHeader, ipHeader[3:5]...)
 
-	//all header fields have been calculated/populated, so reconstruct packet
-	packet = append(append(ipHeader, udpHeader...), payload...)
-	fmt.Println(packet)
-	err = handle.WritePacketData(packet)
-	if err != nil {
-		log.Fatal(err)
-	}
+		//calculate and set udp checksum
+		data := append(udpHeader, payload...)
+		checksum := udpChecksum(pseudoHeader, data)
+		high, low = split_uint16(checksum)
+
+		udpHeader[6] = high
+		udpHeader[7] = low
+
+		//calculate and set ip header checksum
+		checksum = ipChecksum(ipHeader)
+		high, low = split_uint16(checksum)
+
+		ipHeader[12] = high
+		ipHeader[13] = low
+
+		//all header fields have been calculated/populated, so reconstruct packet
+		packet = append(append(ipHeader, udpHeader...), payload...)
+		fmt.Println(packet)
+
+		_, err = c.Write(packet)
+                if strings.TrimSpace(string(payload)) == "STOP" {
+                        fmt.Println("Exiting UDP client!")
+                        return
+                }
+
+		if err != nil {
+                        fmt.Println(err)
+                        return
+                }
+                
+
+                buffer := make([]byte, 1024)
+                n, _, err := c.ReadFromUDP(buffer)
+                if err != nil {
+                        fmt.Println(err)
+                        return
+                }
+                fmt.Printf("Reply: %s\n", string(buffer[0:n]))
+        }
 }
 
 func udpChecksum(phdr []byte, data []byte) uint16 {
@@ -155,3 +185,41 @@ func getMacAddr() ([]byte, error) {
     }
     return macBytes, nil
 }
+
+/*
+package main
+
+import (
+	
+	"fmt"
+	"log"
+	"net"
+	"time"
+	"strings"
+	"strconv"
+)
+
+var (
+    device       string = "ens33"
+    snapshot_len int32  = 1024
+    promiscuous  bool   = false
+    err          error
+    timeout      time.Duration = 30 * time.Second
+    handle       *pcap.Handle
+)
+
+
+func main() {
+     	// Open device
+	handle, err = pcap.OpenLive(device, snapshot_len, promiscuous, timeout)
+	if err != nil {log.Fatal(err) }
+	defer handle.Close()
+	
+	err = handle.WritePacketData(packet)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+
+*/
