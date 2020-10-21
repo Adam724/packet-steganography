@@ -1,13 +1,13 @@
 package main
 
 import (
-	//"github.com/google/gopacket"
-	//"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
 	"fmt"
 	"log"
-	//"net"
+	"net"
 	"time"
+	"strings"
+	"strconv"
 )
 
 var (
@@ -27,8 +27,16 @@ func main() {
 	defer handle.Close()
 
 	// Payload: 'test message' in ASCII
-	payload := []byte{116, 101, 115, 116, 32, 109, 101, 115, 115, 97, 103, 101}
+	payload := []byte("test message")
 
+	//set srcMAC and dstMAC in ethernet header. Will be the same if sending to same device
+	/*
+	srcMAC := getMacAddr()
+	ethHeader := []byte{0}
+	ethHeader = append(ethHeader, srcMAC)
+	ethHeader = append(ethHeader, srcMac)
+        */
+	
 	//version: 4, header length(in 4 byte words): 5, TOS: 0, Length: ?, identifier: ?, flags: 4,
 	//offset: 0, TTL: 64, protocol: 17 (udp), checksum: ?, srcIP: 127.0.0.1, dstIP: 127.0.0.1
 	ipHeader := []byte{45, 0, 0, 0, 33, 151, 4, 0, 0, 0, 64, 17, 0, 0, 127, 0, 0, 1, 127, 0, 0, 1}
@@ -69,9 +77,14 @@ func main() {
 	//all header fields have been calculated/populated, so reconstruct packet
 	packet = append(append(ipHeader, udpHeader...), payload...)
 	fmt.Println(packet)
+	err = handle.WritePacketData(packet)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func udpChecksum(phdr []byte, data []byte) uint16 {
+	//compute 16 bit sum of pseudoheader and data. Data consists of udp header and payload
 	var sum32 uint32 = sum16(data) + sum16(phdr)
 
 	//convert uint32 to uint16 by repeatedly adding carries
@@ -80,6 +93,7 @@ func udpChecksum(phdr []byte, data []byte) uint16 {
 	}
 	//fmt.Printf("%x\n", sum32)
 	//fmt.Printf("%d", ^uint16(sum32))
+	//return inverse of this 16 bit sum
 	return ^uint16(sum32)
 }
 
@@ -94,6 +108,8 @@ func ipChecksum(header []byte) uint16 {
 	return ^uint16(sum32)
 }
 
+//Sums the values in an array of bytes as 16 bit unsigned integers and returns the result as
+//an unsigned 32 bit integer
 func sum16(arr []byte) uint32{
 	var sum uint32 = 0
 	for i := 0; i < len(arr); i += 2{
@@ -111,9 +127,31 @@ func sum16(arr []byte) uint32{
 	return sum
 }
 
+//splits a 16 bit unsigned integer into two equally sized bytes
 func split_uint16(num uint16) (byte, byte) {
 	high := byte((num & (((1 << 8) - 1) << 8)) >> 8) //upper 8 bits
 	low := byte(num & ((1 << 8) - 1)) //lower 8 bits
 	return high, low
 }
 
+//gets the MAC address of this machine as byte array
+func getMacAddr() ([]byte, error) {
+    ifas, err := net.Interfaces()
+    if err != nil {
+        return nil, err
+    }
+    var macBytes []byte
+    for _, ifa := range ifas {
+        a := ifa.HardwareAddr.String()
+        if a != "" {
+		strBytes := strings.Split(a, ":")
+		for i := 0; i < len(strBytes); i++ {
+			b, _ := strconv.ParseInt(strBytes[i], 16, 8)
+			result := byte(b)
+			macBytes = append(macBytes, result)
+		}
+		
+        }
+    }
+    return macBytes, nil
+}
