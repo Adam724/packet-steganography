@@ -1,54 +1,23 @@
 package main
-
 import (
-        "bufio"
-        "fmt"
-        "net"
-        "os"
-        "strings"
+    "fmt"
+    "net"
+    "bufio"
 )
 
 func main() {
-        arguments := os.Args
-        if len(arguments) == 1 {
-                fmt.Println("Please provide a host:port string")
-                return
-        }
-        CONNECT := arguments[1]
-
-        s, err := net.ResolveUDPAddr("udp4", CONNECT)
-        c, err := net.DialUDP("udp4", nil, s)
-        if err != nil {
-                fmt.Println(err)
-                return
-        }
-
-        fmt.Printf("The UDP server is %s\n", c.RemoteAddr().String())
-        defer c.Close()
-
-        for {
-                reader := bufio.NewReader(os.Stdin)
-                fmt.Print(">> ")
-                text, _ := reader.ReadString('\n')
-                data := []byte(text + "\n")
-                _, err = c.Write(data)
-                if strings.TrimSpace(string(data)) == "STOP" {
-                        fmt.Println("Exiting UDP client!")
-                        return
-                }
-		fmt.Printf("packet-written: bytes=%d\n", data)
-
-                if err != nil {
-                        fmt.Println(err)
-                        return
-                }
-
-                buffer := make([]byte, 1024)
-                n, _, err := c.ReadFromUDP(buffer)
-                if err != nil {
-                        fmt.Println(err)
-                        return
-                }
-                fmt.Printf("Reply: %d\n", buffer[:n])
-        }
+    p :=  make([]byte, 2048)
+    conn, err := net.Dial("udp", "127.0.0.1:3000")
+    if err != nil {
+        fmt.Printf("Some error %v", err)
+        return
+    }
+    fmt.Fprintf(conn, "Hi UDP Server, How are you doing?")
+    _, err = bufio.NewReader(conn).Read(p)
+    if err == nil {
+        fmt.Printf("%s\n", p)
+    } else {
+        fmt.Printf("Some error %v\n", err)
+    }
+    conn.Close()
 }
