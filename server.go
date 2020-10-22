@@ -13,7 +13,7 @@ var (
     snapshot_len int32  = 1024
     promiscuous  bool   = false
     err          error
-    timeout      time.Duration = 30 * time.Second
+    timeout      time.Duration = -1 * time.Second
     handle       *pcap.Handle
 )
 
@@ -35,8 +35,24 @@ func main() {
 
     packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
     for packet := range packetSource.Packets() {
-        // Do something with a packet here.
-        fmt.Println(packet)
+	    // Do something with a packet here.
+	    rawBytes := packet.Data()
+	    
+	    ethHeader :=  rawBytes[:14]
+
+	    //Length of ipHeader in 4 byte words
+	    ipLen := rawBytes[14] & 0b1111
+	    ipEndIndex := 14 + (4 * ipLen)
+	    ipHeader := rawBytes[14:ipEndIndex]
+
+	    udpEndIndex := ipEndIndex + 8
+	    udpHeader := rawBytes[ipEndIndex:udpEndIndex]
+	    payload := rawBytes[udpEndIndex:]
+	    
+	    fmt.Println(ethHeader)
+	    fmt.Println(ipHeader)
+	    fmt.Println(udpHeader)
+	    fmt.Println(payload)
     }
 
 }
