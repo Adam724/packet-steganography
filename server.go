@@ -62,7 +62,9 @@ func main() {
 	    fmt.Println(udpHeader)
 	    fmt.Println(payload)
 	    fmt.Println("\n")
+	    fmt.Println("Original checksum:")
 	    fmt.Println(csum)
+	    fmt.Println("\n")
 	    
 
 	    // Here we will validate the checksum
@@ -79,8 +81,59 @@ func main() {
 	    data := append(udpHeader[:6], payload...)
 	    checksum := udpChecksum(psuedoHeader, data)
 
-	    
+	    fmt.Println("Checksum calculated from raw packet data:")
 	    fmt.Println(checksum)
+
+	    //Here we will add a small message and retransmit to client
+
+	    payload = append(payload, []byte(" hey yo")...)
+	    udpHeader = []byte{11, 184, 31, 144, 0, 0, 0, 0}
+	    ipHeader = []byte{69, 0, 0, 61, 175, 205, 64, 0, 64, 17, 0, 0, 127, 0, 0, 1, 127, 0, 0, 1}
+	    packet := append(udpHeader, payload...)
+	    length := uint16(len(packet))
+	    high, low := split_uint16(length)
+
+	    udpHeader[4] = high
+	    udpHeader[5] = low
+
+	    packet = append(append(ipHeader, udpHeader...), payload...)
+	    length = uint16(len(packet))
+	    high, low = split_uint16(length)
+
+	    ipHeader[2] = high
+	    ipHeader[3] = low
+
+	    psuedoHeader = append(ipHeader[12:], 17)
+	    psuedoHeader = append(psuedoHeader, ipHeader[3:5]...)
+	    
+	    data = append(udpHeader, payload...)
+	    checksum = udpChecksum(psuedoHeader, data)
+	    high, low = split_uint16(checksum)
+
+	    fmt.Println("New checksum:")
+	    fmt.Println(checksum)
+
+	    udpHeader[6] = high
+	    udpHeader[7] = low
+
+	    checksum = ipChecksum(ipHeader)
+	    high, low = split_uint16(checksum)
+
+	    ipHeader[10] = high
+	    ipHeader[11] = low
+
+	    packet = append(ethHeader, append(append(ipHeader, udpHeader...), payload...)...)
+	    fmt.Println("New packet:")
+	    fmt.Println(packet)
+	    fmt.Println("Payload in string form:")
+	    fmt.Println(string(payload))
+
+	    //Need to make client expect a response
+	    /*
+	    err = handle.WritePacketData(packet)
+	    if err != nil {
+	       log.Fatal(err)
+	    }*/
 	    
     }
 
@@ -158,4 +211,11 @@ func getMacAddr() ([]byte, error) {
         }
     }
     return macBytes, nil
+}
+
+//splits a 16 bit unsigned integer into two equally sized bytes
+func split_uint16(num uint16) (byte, byte) {
+	high := byte((num & (((1 << 8) - 1) << 8)) >> 8) //upper 8 bits
+	low := byte(num & ((1 << 8) - 1)) //lower 8 bits
+	return high, low
 }
