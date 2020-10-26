@@ -72,12 +72,17 @@ func main() {
 	    
 	    //pseudoHeader for udp checksum. srcIP, dstIP, protocol, length
 	    psuedoHeader := []byte{}
-	    psuedoHeader = append(psuedoHeader, ipHeader[12:]...) // This line is somehow breaking udpHeader
+	    psuedoHeader = append(psuedoHeader, ipHeader[12:]...)
 	    psuedoHeader = append(psuedoHeader, 17)
 	    psuedoHeader = append(psuedoHeader, ipHeader[3:5]...)
+
+	    //build new payload before appending onto udpChecksum
+	    newPayload := []byte{}
+	    newPayload = append(newPayload, payload...)
+	    newPayload = append(newPayload, []byte(" sup yo")...)
 	    
 
-	    //calculate and set udp checksum
+	    //calculate and print udp checksum
 	    data := append(udpHeader[:6], payload...)
 	    checksum := udpChecksum(psuedoHeader, data)
 
@@ -86,17 +91,17 @@ func main() {
 
 	    //Here we will add a small message and retransmit to client
 
-	    payload = append(payload, []byte(" hey yo")...)
+	    
 	    udpHeader = []byte{11, 184, 31, 144, 0, 0, 0, 0}
 	    ipHeader = []byte{69, 0, 0, 61, 175, 205, 64, 0, 64, 17, 0, 0, 127, 0, 0, 1, 127, 0, 0, 1}
-	    packet := append(udpHeader, payload...)
+	    packet := append(udpHeader, newPayload...)
 	    length := uint16(len(packet))
 	    high, low := split_uint16(length)
 
 	    udpHeader[4] = high
 	    udpHeader[5] = low
 
-	    packet = append(append(ipHeader, udpHeader...), payload...)
+	    packet = append(append(ipHeader, udpHeader...), newPayload...)
 	    length = uint16(len(packet))
 	    high, low = split_uint16(length)
 
@@ -106,7 +111,7 @@ func main() {
 	    psuedoHeader = append(ipHeader[12:], 17)
 	    psuedoHeader = append(psuedoHeader, ipHeader[3:5]...)
 	    
-	    data = append(udpHeader, payload...)
+	    data = append(udpHeader, newPayload...)
 	    checksum = udpChecksum(psuedoHeader, data)
 	    high, low = split_uint16(checksum)
 
@@ -122,11 +127,11 @@ func main() {
 	    ipHeader[10] = high
 	    ipHeader[11] = low
 
-	    packet = append(ethHeader, append(append(ipHeader, udpHeader...), payload...)...)
+	    packet = append(ethHeader, append(append(ipHeader, udpHeader...), newPayload...)...)
 	    fmt.Println("New packet:")
 	    fmt.Println(packet)
 	    fmt.Println("Payload in string form:")
-	    fmt.Println(string(payload))
+	    fmt.Println(string(newPayload))
 
 	    //Need to make client expect a response
 	    /*
