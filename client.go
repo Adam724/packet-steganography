@@ -66,13 +66,15 @@ func main() {
 	ipHeader[3] = low
 
 	//pseudoHeader for udp checksum. srcIP, dstIP, protocol, length
-	pseudoHeader := append(ipHeader[len(ipHeader) - 8:], 17)
+	pseudoHeader := append(ipHeader[12:], 17)
 	pseudoHeader = append(pseudoHeader, ipHeader[3:5]...)
 
 	//calculate and set udp checksum
 	data := append(udpHeader, payload...)
 	checksum := udpChecksum(pseudoHeader, data)
 	high, low = split_uint16(checksum)
+
+	fmt.Println(checksum)
 
 	udpHeader[6] = high
 	udpHeader[7] = low
