@@ -5,10 +5,9 @@ import (
 	"github.com/google/gopacket/pcap"
 	"fmt"
 	"log"
-	"net"
 	"time"
-	"strings"
-	"strconv"
+	//"strings"
+	//"strconv"
 )
 
 var (
@@ -29,14 +28,6 @@ func main() {
 
 	payload := []byte("test message")
 
-	//set srcMAC and dstMAC in ethernet header. Will be the same if sending to same device
-	/*
-	srcMAC := getMacAddr()
-	ethHeader := []byte{0}
-	ethHeader = append(ethHeader, srcMAC)
-	ethHeader = append(ethHeader, srcMac)
-        */
-
 	ethHeader := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0}
 
 	//version: 4, header length(in 4 byte words): 5, TOS: 0, Length: ?, identifier: ?, flags: 4,
@@ -44,11 +35,11 @@ func main() {
 	ipHeader := []byte{69, 0, 0, 61, 175, 205, 64, 0, 64, 17, 0, 0, 127, 0, 0, 1, 127, 0, 0, 1}
 
 	//srcPort: 3000, dstPort: 8080, length: ?, checksum: ?
-	udpHeader := []byte{11, 184, 31, 144, 0, 0, 0, 0}
-	//udpHeader := []byte{31, 144, 11, 184, 0, 0, 0, 0}
+	//udpHeader := []byte{11, 184, 31, 144, 0, 0, 0, 0}
+	udpHeader := []byte{31, 144, 11, 184, 0, 0, 0, 0}
 
 	//combine udp header and payload and get length
-	packet := append(udpHeader, payload...)
+	packet := append(udpHeader, payload)
 	length := uint16(len(packet))
 	high, low := split_uint16(length)
 
@@ -57,7 +48,7 @@ func main() {
 	udpHeader[5] = low
 	
 	//append ip header to front of packet and get length
-	packet = append(append(ipHeader, udpHeader...), payload...)
+	packet = append(append(ipHeader, udpHeader), payload)
 	length = uint16(len(packet))
 	high, low = split_uint16(length)
 
@@ -66,12 +57,14 @@ func main() {
 	ipHeader[3] = low
 
 	//pseudoHeader for udp checksum. srcIP, dstIP, protocol, length
-	pseudoHeader := append(ipHeader[12:], 17)
-	pseudoHeader = append(pseudoHeader, ipHeader[3:5]...)
+	pseudoHeader := appendOne(ipHeader[12:], byte(0))
+	pseudoHeader = appendOne(pseudoHeader, byte(17))
+	pseudoHeader = append(pseudoHeader, udpHeader[4:6])
 
 	//calculate and set udp checksum
-	data := append(udpHeader, payload...)
-	checksum := udpChecksum(pseudoHeader, data)
+	data := append(udpHeader, payload)
+	csum := sum16(pseudoHeader)
+	checksum := calcChecksum(csum, data)
 	high, low = split_uint16(checksum)
 
 	fmt.Println(checksum)
@@ -80,14 +73,14 @@ func main() {
 	udpHeader[7] = low
 
 	//calculate and set ip header checksum
-	checksum = ipChecksum(ipHeader)
+	checksum = calcChecksum(0, ipHeader)
 	high, low = split_uint16(checksum)
 
 	ipHeader[10] = high
 	ipHeader[11] = low
 
 	//all header fields have been calculated/populated, so reconstruct packet
-	packet = append(ethHeader, append(append(ipHeader, udpHeader...), payload...)...)
+	packet = append(ethHeader, append(append(ipHeader, udpHeader), payload))
 	fmt.Println(packet)
 	err = handle.WritePacketData(packet)
 	if err != nil {
@@ -95,22 +88,8 @@ func main() {
 	}
 }
 
-func udpChecksum(phdr []byte, data []byte) uint16 {
-	//compute 16 bit sum of pseudoheader and data. Data consists of udp header and payload
-	var sum32 uint32 = sum16(data) + sum16(phdr)
-
-	//convert uint32 to uint16 by repeatedly adding carries
-	for i := 0; sum32 > 65535; i++{
-		sum32 = ((sum32 & (((1 << 16) - 1) << 16) ) >> 16) + (sum32 & ((1 << 16) - 1))
-	}
-	//fmt.Printf("%x\n", sum32)
-	//fmt.Printf("%d", ^uint16(sum32))
-	//return inverse of this 16 bit sum
-	return ^uint16(sum32)
-}
-
-func ipChecksum(header []byte) uint16 {
-	var sum32 uint32 = sum16(header)
+func calcChecksum(csum uint32, data []byte) uint16 {
+	var sum32 uint32 = sum16(data) + csum
 
 	//convert uint32 to uint16 by repeatedly adding carries
 	for i := 0; sum32 > 65535; i++{
@@ -146,24 +125,28 @@ func split_uint16(num uint16) (byte, byte) {
 	return high, low
 }
 
-//gets the MAC address of this machine as byte array
-func getMacAddr() ([]byte, error) {
-    ifas, err := net.Interfaces()
-    if err != nil {
-        return nil, err
-    }
-    var macBytes []byte
-    for _, ifa := range ifas {
-        a := ifa.HardwareAddr.String()
-        if a != "" {
-		strBytes := strings.Split(a, ":")
-		for i := 0; i < len(strBytes); i++ {
-			b, _ := strconv.ParseInt(strBytes[i], 16, 8)
-			result := byte(b)
-			macBytes = append(macBytes, result)
-		}
-		
-        }
-    }
-    return macBytes, nil
+//manual append function to combine two byte arrays for verilog compiler
+func append(arr1 []byte, arr2 []byte) []byte {
+	arr1Len := len(arr1)
+	newLen := len(arr1) + len(arr2)
+	result := make([]byte, newLen)
+	
+	for i:= 0; i < arr1Len; i++ {
+		result[i] = arr1[i]
+	}
+	
+	for i := 0; i < len(arr2); i++ {
+		result[i + arr1Len] = arr2[i]
+	}
+	return result
+}
+
+//appends single byte to byte array in verilog-compiler safe way
+func appendOne(arr1 []byte, oneByte byte) []byte {
+	result := make([]byte, len(arr1) + 1)
+	for i:= 0; i < len(arr1); i++ {
+		result[i] = arr1[i]
+	}
+	result[len(result) - 1] = oneByte
+	return result
 }

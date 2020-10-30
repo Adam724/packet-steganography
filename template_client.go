@@ -12,7 +12,7 @@ func main() {
         fmt.Printf("Some error %v", err)
         return
     }
-    fmt.Fprintf(conn, "Hi UDP Server, How are you doing?")
+    fmt.Fprintf(conn, "test message")
     _, err = bufio.NewReader(conn).Read(p)
     if err == nil {
         fmt.Printf("%s\n", p)
