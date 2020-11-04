@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"log"
 	"time"
-	//"strings"
-	//"strconv"
+	"os"
+	"net"
+	"bufio"
 )
 
 var (
@@ -20,7 +21,9 @@ var (
 )
 
 func main() {
+	go handleMessageSend()
 
+	//Generate packets to hide message in and also send to encoder
 	// Open device
 	handle, err = pcap.OpenLive(device, snapshot_len, promiscuous, timeout)
 	if err != nil {log.Fatal(err) }
@@ -81,11 +84,50 @@ func main() {
 
 	//all header fields have been calculated/populated, so reconstruct packet
 	packet = append(ethHeader, append(append(ipHeader, udpHeader), payload))
+	/*packet[18] = 119
+	packet[19] = 254
+	packet[24] = 196
+	packet[25] = 196
+	packet[34] = 143
+	packet[35] = 109
+	packet[40] = 254
+	packet[41] = 39*/
 	fmt.Println(packet)
 	err = handle.WritePacketData(packet)
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func handleMessageSend() {
+	//get and send message to hide to the encoder
+	if len(os.Args) < 2 {
+		fmt.Println("No message argument specified!!")
+		return
+	}
+	message := os.Args[1]
+	err = sendMessage(message)
+	if err != nil {
+		fmt.Println("Error sending message!!")
+		return
+	}
+}
+
+func sendMessage(msg string) error {
+	p :=  make([]byte, 2048)
+	conn, err := net.Dial("udp", "127.0.0.1:6000")
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(conn, msg)
+	_, err = bufio.NewReader(conn).Read(p)
+	if err == nil {
+		fmt.Printf("%s\n", p)
+	} else {
+		return err
+	}
+	conn.Close()
+	return nil
 }
 
 func calcChecksum(csum uint32, data []byte) uint16 {

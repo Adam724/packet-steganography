@@ -21,6 +21,9 @@ var (
 )
 
 func main() {
+	ch := make(chan []byte)
+	go handleMessageRead(ch)
+	
     // Open device
     handle, err = pcap.OpenLive(device, snapshot_len, promiscuous, timeout)
     if err != nil {
@@ -67,33 +70,14 @@ func main() {
 	    fmt.Println("\n")
 	    
 
-	    // Here we will validate the checksum
-
-	    
-	    //pseudoHeader for udp checksum. srcIP, dstIP, protocol, length
-	    psuedoHeader := []byte{}
-	    psuedoHeader = append(psuedoHeader, ipHeader[12:]...)
-	    psuedoHeader = append(psuedoHeader, 17)
-	    psuedoHeader = append(psuedoHeader, ipHeader[3:5]...)
-
-	    //build new payload before appending onto udpChecksum
-	    newPayload := []byte{}
-	    newPayload = append(newPayload, payload...)
-	    newPayload = append(newPayload, []byte(" sup yo")...)
-	    
-
-	    //calculate and print udp checksum
-	    data := append(udpHeader[:6], payload...)
-	    checksum := udpChecksum(psuedoHeader, data)
-
-	    fmt.Println("Checksum calculated from raw packet data:")
-	    fmt.Println(checksum)
-
-	    //Here we will add a small message and retransmit to client
-
+	    //Attempt to hide message in payload and retransmit packet
 	    
 	    udpHeader = []byte{11, 184, 31, 144, 0, 0, 0, 0}
 	    ipHeader = []byte{69, 0, 0, 61, 175, 205, 64, 0, 64, 17, 0, 0, 127, 0, 0, 1, 127, 0, 0, 1}
+
+	    msgStr := <- ch
+	    message := []byte(msgStr)
+	    newPayload := hideMessage(payload, message)
 	    packet := append(udpHeader, newPayload...)
 	    length := uint16(len(packet))
 	    high, low := split_uint16(length)
@@ -132,16 +116,39 @@ func main() {
 	    fmt.Println(packet)
 	    fmt.Println("Payload in string form:")
 	    fmt.Println(string(newPayload))
-
-	    //Need to make client expect a response
-	    /*
-	    err = handle.WritePacketData(packet)
-	    if err != nil {
-	       log.Fatal(err)
-	    }*/
 	    
     }
 
+}
+
+func handleMessageRead(c chan []byte) {
+	//Normal udp server to listen for message to hide sent by client
+	msg, err := listenUDPMessage(6000)
+	if err != nil {
+		fmt.Println("Problem reading message from client")
+		return
+	}
+	c <- msg
+}
+
+func listenUDPMessage(port int) ([]byte, error) {
+	p := make([]byte, 2048)
+	addr := net.UDPAddr{
+		Port: port,
+		IP: net.ParseIP("127.0.0.1"),
+	}
+	ser, err := net.ListenUDP("udp", &addr)
+	if err != nil {
+		return nil, err
+	}
+	for {
+		_,remoteaddr,err := ser.ReadFromUDP(p)
+		fmt.Printf("Read a message from %v %s \n", remoteaddr, p)
+		if err !=  nil {
+			return nil, err
+		}
+		return p, nil
+	}
 }
 
 
@@ -195,32 +202,88 @@ func combine_uint16(high byte, low byte) (uint16) {
 	return num
 }
 
-
-//gets the MAC address of this machine as byte array
-func getMacAddr() ([]byte, error) {
-    ifas, err := net.Interfaces()
-    if err != nil {
-        return nil, err
-    }
-    var macBytes []byte
-    for _, ifa := range ifas {
-        a := ifa.HardwareAddr.String()
-        if a != "" {
-		strBytes := strings.Split(a, ":")
-		for i := 0; i < len(strBytes); i++ {
-			b, _ := strconv.ParseInt(strBytes[i], 16, 8)
-			result := byte(b)
-			macBytes = append(macBytes, result)
-		}
-		
-        }
-    }
-    return macBytes, nil
-}
-
 //splits a 16 bit unsigned integer into two equally sized bytes
 func split_uint16(num uint16) (byte, byte) {
 	high := byte((num & (((1 << 8) - 1) << 8)) >> 8) //upper 8 bits
 	low := byte(num & ((1 << 8) - 1)) //lower 8 bits
 	return high, low
+}
+
+//hide message in prvided payload data
+func hideMessage(data []byte, msg []byte) []byte {
+	dataBinStr := stringToBin(string(data))
+	msgBinStr := stringToBin(string(msg))
+	
+	rand.Seed(1111)
+	numBits := len(msgBinStr)
+	var randPositions = make([]int, numBits, numBits)
+	
+	for i := 0; i < numBits; i++ {
+		randIndex := rand.Intn(len(dataBinStr) + i)
+		randPositions[i] = randIndex
+	}
+	sort.Ints(randPositions)
+	fmt.Println(randPositions)
+	
+	newStr := dataBinStr
+	for i := 0; i < numBits; i++ {
+		currentBit := msgBinStr[i:i+1]
+		newStr = insertBit(newStr, currentBit, randPositions[i])
+	}
+	fmt.Println("hidden binary: " + newStr)
+	return []byte(binToString(newStr))
+}
+
+//extract hidden message from payload
+func extractMessage(data []byte, msgLen int) (extractedMsg []byte, origData []byte) {
+	dataBinStr := stringToBin(string(data))
+	fmt.Println(dataBinStr)
+	numBits := msgLen * 8
+	rand.Seed(1111)
+	
+	var randPositions = make([]int, numBits, numBits)
+	
+	for i := 0; i < numBits; i++ {
+		randIndex := rand.Intn(len(dataBinStr) - numBits + i)
+		randPositions[i] = randIndex
+	}
+	sort.Ints(randPositions)
+
+	newStr := dataBinStr
+	msgBin := ""
+	for i := 0; i < numBits; i++ {
+		bit, altered := extractBit(newStr, randPositions[i] - i)
+		newStr = altered
+		msgBin += bit
+	}
+	return []byte(binToString(msgBin)), []byte(binToString(newStr))
+}
+
+//insert a bit into a bit string at given index
+func insertBit(bStr string, bit string, index int) string {
+	return bStr[:index] + bit + bStr[index:]
+}
+
+//remove single bit from bit string at given index
+func extractBit(data string, index int) (bit string, newStr string) {
+	newStr = data[:index+1] + data[index + 2:]
+	return data[index+1:index+2], newStr
+}
+
+//convert readable ascii string to bit string
+func stringToBin(s string) (binString string) {
+    for _, c := range s {
+        binString = fmt.Sprintf("%s%.8b",binString, c)
+    }
+    return 
+}
+
+//convert a bit string to readable ascii string
+func binToString(s string) (str string) {
+	b := make([]byte, 0)
+	for i := 0; i < len(s); i += 8 {
+		n, _ := strconv.ParseUint(s[i:i+8], 2, 8)
+		b = append(b, byte(n))
+	}
+	return string(b)
 }
