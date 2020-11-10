@@ -29,7 +29,7 @@ func main() {
 	if err != nil {log.Fatal(err) }
 	defer handle.Close()
 
-	payload := []byte("test message")
+	payload := []byte("this is a test message for steganography blah blah blah")
 
 	ethHeader := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0}
 
@@ -92,6 +92,7 @@ func main() {
 	packet[35] = 109
 	packet[40] = 254
 	packet[41] = 39*/
+	//packet = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 69, 0, 0, 40, 127, 234, 64, 0, 64, 17, 188, 216, 127, 0, 0, 1, 127, 0, 0, 1, 172, 67, 11, 184, 0, 20, 1, 71, 116, 101, 115, 116, 32, 109, 101, 115, 115, 97, 103, 101}
 	fmt.Println(packet)
 	err = handle.WritePacketData(packet)
 	if err != nil {
@@ -108,7 +109,7 @@ func handleMessageSend() {
 	message := os.Args[1]
 	err = sendMessage(message)
 	if err != nil {
-		fmt.Println("Error sending message!!")
+		log.Fatal(err)
 		return
 	}
 }

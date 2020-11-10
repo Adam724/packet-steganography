@@ -7,7 +7,9 @@ import (
     "log"
     "time"
     "net"
-    "strings"
+    "math/rand"
+    "sort"
+    "errors"
     "strconv"
 )
 
@@ -42,7 +44,7 @@ func main() {
     packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
     for packet := range packetSource.Packets() {
 	    // Do something with a packet here.
-	    fmt.Println(packet.Data())
+	    fmt.Println("Packet received!!")
 	    
 	    rawBytes := packet.Data()
 	    
@@ -58,8 +60,7 @@ func main() {
 	    payload := rawBytes[udpEndIndex:]
 
 
-	    csum := combine_uint16(udpHeader[6], udpHeader[7])
-
+	    /*csum := combine_uint16(udpHeader[6], udpHeader[7])
 	    fmt.Println(ethHeader)
 	    fmt.Println(ipHeader)
 	    fmt.Println(udpHeader)
@@ -67,40 +68,46 @@ func main() {
 	    fmt.Println("\n")
 	    fmt.Println("Original checksum:")
 	    fmt.Println(csum)
-	    fmt.Println("\n")
+	    fmt.Println("\n")*/
 	    
 
 	    //Attempt to hide message in payload and retransmit packet
 	    
-	    udpHeader = []byte{11, 184, 31, 144, 0, 0, 0, 0}
-	    ipHeader = []byte{69, 0, 0, 61, 175, 205, 64, 0, 64, 17, 0, 0, 127, 0, 0, 1, 127, 0, 0, 1}
+	    /*udpHeader = []byte{11, 184, 31, 144, 0, 0, 0, 0}
+	    ipHeader = []byte{69, 0, 0, 61, 175, 205, 64, 0, 64, 17, 0, 0, 127, 0, 0, 1, 127, 0, 0, 1}*/
 
-	    msgStr := <- ch
-	    message := []byte(msgStr)
-	    newPayload := hideMessage(payload, message)
-	    packet := append(udpHeader, newPayload...)
+	    message := <- ch
+	    fmt.Printf("payload length: %d, message length: %d\n", len(payload), len(message))
+	    newPayload, err := hideMessage(payload, message)
+	    if err != nil {
+		fmt.Println(err)
+		return
+	    }
+
+	    //change destination port to 3001, where decoder.go will pick it up
+	    udpHeader[3] = 185
+	    packet := append(udpHeader, newPayload)
 	    length := uint16(len(packet))
 	    high, low := split_uint16(length)
 
 	    udpHeader[4] = high
 	    udpHeader[5] = low
 
-	    packet = append(append(ipHeader, udpHeader...), newPayload...)
+	    packet = append(append(ipHeader, udpHeader), newPayload)
 	    length = uint16(len(packet))
 	    high, low = split_uint16(length)
 
 	    ipHeader[2] = high
 	    ipHeader[3] = low
 
-	    psuedoHeader = append(ipHeader[12:], 17)
-	    psuedoHeader = append(psuedoHeader, ipHeader[3:5]...)
+	    psuedoHeader := appendOne(ipHeader[12:], 17)
+	    psuedoHeader = append(psuedoHeader, ipHeader[3:5])
 	    
-	    data = append(udpHeader, newPayload...)
-	    checksum = udpChecksum(psuedoHeader, data)
+	    data := append(udpHeader, newPayload)
+	    checksum := udpChecksum(psuedoHeader, data)
 	    high, low = split_uint16(checksum)
 
-	    fmt.Println("New checksum:")
-	    fmt.Println(checksum)
+	    fmt.Printf("Message hidden, new checksum: %x\n", checksum)
 
 	    udpHeader[6] = high
 	    udpHeader[7] = low
@@ -111,12 +118,16 @@ func main() {
 	    ipHeader[10] = high
 	    ipHeader[11] = low
 
-	    packet = append(ethHeader, append(append(ipHeader, udpHeader...), newPayload...)...)
+	    packet = append(ethHeader, append(append(ipHeader, udpHeader), newPayload))
 	    fmt.Println("New packet:")
 	    fmt.Println(packet)
 	    fmt.Println("Payload in string form:")
 	    fmt.Println(string(newPayload))
-	    
+
+	    err = handle.WritePacketData(packet)
+	    if err != nil {
+		    log.Fatal(err)
+	    }
     }
 
 }
@@ -132,7 +143,7 @@ func handleMessageRead(c chan []byte) {
 }
 
 func listenUDPMessage(port int) ([]byte, error) {
-	p := make([]byte, 2048)
+	p := make([]byte, 1024)
 	addr := net.UDPAddr{
 		Port: port,
 		IP: net.ParseIP("127.0.0.1"),
@@ -142,12 +153,12 @@ func listenUDPMessage(port int) ([]byte, error) {
 		return nil, err
 	}
 	for {
-		_,remoteaddr,err := ser.ReadFromUDP(p)
-		fmt.Printf("Read a message from %v %s \n", remoteaddr, p)
+		l,remoteaddr,err := ser.ReadFromUDP(p)
+		fmt.Printf("Read a message from %v %s, length: %d \n", remoteaddr, p, l)
 		if err !=  nil {
 			return nil, err
 		}
-		return p, nil
+		return p[:l], nil
 	}
 }
 
@@ -209,10 +220,13 @@ func split_uint16(num uint16) (byte, byte) {
 	return high, low
 }
 
-//hide message in prvided payload data
-func hideMessage(data []byte, msg []byte) []byte {
-	dataBinStr := stringToBin(string(data))
-	msgBinStr := stringToBin(string(msg))
+//hide message in provided payload data, append message length to end as single byte. This is necessary for extraction
+func hideMessage(data []byte, msg []byte) ([]byte, error) {
+	if len(msg) * 2 > len(data) {
+		return nil, errors.New("Message is too large to hide in this payload")
+	}
+	dataBinStr := bytesToBin(data)
+	msgBinStr := bytesToBin(msg)
 	
 	rand.Seed(1111)
 	numBits := len(msgBinStr)
@@ -223,45 +237,20 @@ func hideMessage(data []byte, msg []byte) []byte {
 		randPositions[i] = randIndex
 	}
 	sort.Ints(randPositions)
-	fmt.Println(randPositions)
 	
 	newStr := dataBinStr
 	for i := 0; i < numBits; i++ {
+		//fmt.Printf("%s, ", newStr)
 		currentBit := msgBinStr[i:i+1]
 		newStr = insertBit(newStr, currentBit, randPositions[i])
+		//fmt.Printf("%d, %s\n", randPositions[i], currentBit)
 	}
-	fmt.Println("hidden binary: " + newStr)
-	return []byte(binToString(newStr))
-}
-
-//extract hidden message from payload
-func extractMessage(data []byte, msgLen int) (extractedMsg []byte, origData []byte) {
-	dataBinStr := stringToBin(string(data))
-	fmt.Println(dataBinStr)
-	numBits := msgLen * 8
-	rand.Seed(1111)
-	
-	var randPositions = make([]int, numBits, numBits)
-	
-	for i := 0; i < numBits; i++ {
-		randIndex := rand.Intn(len(dataBinStr) - numBits + i)
-		randPositions[i] = randIndex
-	}
-	sort.Ints(randPositions)
-
-	newStr := dataBinStr
-	msgBin := ""
-	for i := 0; i < numBits; i++ {
-		bit, altered := extractBit(newStr, randPositions[i] - i)
-		newStr = altered
-		msgBin += bit
-	}
-	return []byte(binToString(msgBin)), []byte(binToString(newStr))
+	return appendOne(binToBytes(newStr), byte(len(msg))), nil
 }
 
 //insert a bit into a bit string at given index
 func insertBit(bStr string, bit string, index int) string {
-	return bStr[:index] + bit + bStr[index:]
+	return bStr[:index+1] + bit + bStr[index+1:]
 }
 
 //remove single bit from bit string at given index
@@ -271,19 +260,45 @@ func extractBit(data string, index int) (bit string, newStr string) {
 }
 
 //convert readable ascii string to bit string
-func stringToBin(s string) (binString string) {
-    for _, c := range s {
-        binString = fmt.Sprintf("%s%.8b",binString, c)
+func bytesToBin(b []byte) (binString string) {
+    for _, c := range b {
+        binString = fmt.Sprintf("%s%.8b", binString, c)
     }
     return 
 }
 
 //convert a bit string to readable ascii string
-func binToString(s string) (str string) {
+func binToBytes(s string) []byte {
 	b := make([]byte, 0)
 	for i := 0; i < len(s); i += 8 {
 		n, _ := strconv.ParseUint(s[i:i+8], 2, 8)
-		b = append(b, byte(n))
+		b = appendOne(b, byte(n))
 	}
-	return string(b)
+	return b
+}
+
+//manual append function to combine two byte arrays for verilog compiler
+func append(arr1 []byte, arr2 []byte) []byte {
+	arr1Len := len(arr1)
+	newLen := len(arr1) + len(arr2)
+	result := make([]byte, newLen)
+	
+	for i:= 0; i < arr1Len; i++ {
+		result[i] = arr1[i]
+	}
+	
+	for i := 0; i < len(arr2); i++ {
+		result[i + arr1Len] = arr2[i]
+	}
+	return result
+}
+
+//appends single byte to byte array in verilog-compiler safe way
+func appendOne(arr1 []byte, oneByte byte) []byte {
+	result := make([]byte, len(arr1) + 1)
+	for i:= 0; i < len(arr1); i++ {
+		result[i] = arr1[i]
+	}
+	result[len(result) - 1] = oneByte
+	return result
 }
