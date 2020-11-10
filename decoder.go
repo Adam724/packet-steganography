@@ -9,6 +9,8 @@ import (
     "math/rand"
     "sort"
     "strconv"
+    "net"
+    "bufio"
 )
 
 var (
@@ -58,6 +60,12 @@ func main() {
 		extractedMsg, originalPayload := extractMessage(payload, mLen)
 		fmt.Println(string(extractedMsg))
 		fmt.Println(originalPayload)
+
+		
+		//Send original payload to port 3002
+		go sendMessage(string(originalPayload))
+		
+		
 	}
 }
 
@@ -109,4 +117,23 @@ func binToBytes(s string) []byte {
 		b = append(b, byte(n))
 	}
 	return b
+}
+
+func sendMessage(msg string) {
+	p :=  make([]byte, 2048)
+	conn, err := net.Dial("udp", "127.0.0.1:3002")
+	if err != nil {
+		//return err
+		fmt.Println(err)
+	}
+	fmt.Fprintf(conn, msg)
+	_, err = bufio.NewReader(conn).Read(p)
+	if err == nil {
+		fmt.Printf("%s\n", p)
+	} else {
+		//return err
+		fmt.Println(err)
+	}
+	conn.Close()
+	//return nil
 }

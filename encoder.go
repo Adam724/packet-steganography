@@ -43,8 +43,21 @@ func main() {
 
     packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
     for packet := range packetSource.Packets() {
+    
+    	    
 	    // Do something with a packet here.
 	    fmt.Println("Packet received!!")
+
+	    message := make([]byte, 20)
+	    select {
+    	    case message = <-ch:
+        	fmt.Println("received message")
+    	    default:
+		fmt.Println("no message received")
+		continue;
+    	    }
+	    
+	    fmt.Println(string(message))
 	    
 	    rawBytes := packet.Data()
 	    
@@ -76,7 +89,7 @@ func main() {
 	    /*udpHeader = []byte{11, 184, 31, 144, 0, 0, 0, 0}
 	    ipHeader = []byte{69, 0, 0, 61, 175, 205, 64, 0, 64, 17, 0, 0, 127, 0, 0, 1, 127, 0, 0, 1}*/
 
-	    message := <- ch
+	    
 	    fmt.Printf("payload length: %d, message length: %d\n", len(payload), len(message))
 	    newPayload, err := hideMessage(payload, message)
 	    if err != nil {
@@ -92,6 +105,7 @@ func main() {
 
 	    udpHeader[4] = high
 	    udpHeader[5] = low
+
 
 	    packet = append(append(ipHeader, udpHeader), newPayload)
 	    length = uint16(len(packet))
@@ -128,21 +142,22 @@ func main() {
 	    if err != nil {
 		    log.Fatal(err)
 	    }
+	    fmt.Println("Packet sent")
     }
 
 }
 
 func handleMessageRead(c chan []byte) {
 	//Normal udp server to listen for message to hide sent by client
-	msg, err := listenUDPMessage(6000)
+	err := listenUDPMessage(6000, c)
 	if err != nil {
 		fmt.Println("Problem reading message from client")
 		return
 	}
-	c <- msg
+	
 }
 
-func listenUDPMessage(port int) ([]byte, error) {
+func listenUDPMessage(port int, c chan []byte) (error) {
 	p := make([]byte, 1024)
 	addr := net.UDPAddr{
 		Port: port,
@@ -150,15 +165,15 @@ func listenUDPMessage(port int) ([]byte, error) {
 	}
 	ser, err := net.ListenUDP("udp", &addr)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	for {
 		l,remoteaddr,err := ser.ReadFromUDP(p)
 		fmt.Printf("Read a message from %v %s, length: %d \n", remoteaddr, p, l)
 		if err !=  nil {
-			return nil, err
+			continue
 		}
-		return p[:l], nil
+		c <- p[:l]
 	}
 }
 
@@ -222,6 +237,7 @@ func split_uint16(num uint16) (byte, byte) {
 
 //hide message in provided payload data, append message length to end as single byte. This is necessary for extraction
 func hideMessage(data []byte, msg []byte) ([]byte, error) {
+        msg = append([]byte("3003"), msg)
 	if len(msg) * 2 > len(data) {
 		return nil, errors.New("Message is too large to hide in this payload")
 	}
