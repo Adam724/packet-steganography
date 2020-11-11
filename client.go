@@ -12,7 +12,7 @@ import (
 )
 
 var (
-    device       string = "lo"
+    device       string = "tun0"
     snapshot_len int32  = 1024
     promiscuous  bool   = false
     err          error
@@ -21,7 +21,7 @@ var (
 )
 
 func main() {
-	go handleMessageSend()
+	//go handleMessageSend()
 
 	//Generate packets to hide message in and also send to encoder
 	// Open device

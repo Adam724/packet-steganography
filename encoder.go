@@ -46,7 +46,7 @@ func main() {
     
     	    
 	    // Do something with a packet here.
-	    fmt.Println("Packet received!!")
+	    fmt.Println("Packet received")
 
 	    message := make([]byte, 20)
 	    select {
@@ -133,9 +133,9 @@ func main() {
 	    ipHeader[11] = low
 
 	    packet = append(ethHeader, append(append(ipHeader, udpHeader), newPayload))
-	    fmt.Println("New packet:")
-	    fmt.Println(packet)
-	    fmt.Println("Payload in string form:")
+	    //fmt.Println("New packet:")
+	    //fmt.Println(packet)
+	    fmt.Println("New payload in string form:")
 	    fmt.Println(string(newPayload))
 
 	    err = handle.WritePacketData(packet)
@@ -237,7 +237,9 @@ func split_uint16(num uint16) (byte, byte) {
 
 //hide message in provided payload data, append message length to end as single byte. This is necessary for extraction
 func hideMessage(data []byte, msg []byte) ([]byte, error) {
-        msg = append([]byte("3003"), msg)
+	high, low := split_uint16(3003)
+	destPort := []byte{high, low}
+        msg = append(destPort, msg)
 	if len(msg) * 2 > len(data) {
 		return nil, errors.New("Message is too large to hide in this payload")
 	}

@@ -58,12 +58,14 @@ func main() {
 		payload = payload[:len(payload) - 1]
 		
 		extractedMsg, originalPayload := extractMessage(payload, mLen)
-		fmt.Println(string(extractedMsg))
-		fmt.Println(originalPayload)
+		var destPort uint16 = (uint16(extractedMsg[0]) << 8) + uint16(extractedMsg[1])
+		fmt.Println(string(extractedMsg[2:]))
+		fmt.Printf("Original destination port: %d\n", destPort)
+		fmt.Println("Original payload in string format: ", string(originalPayload))
 
 		
-		//Send original payload to port 3002
-		go sendMessage(string(originalPayload))
+		//Send original payload to original destination port
+		go sendMessage(string(originalPayload), destPort)
 		
 		
 	}
@@ -119,9 +121,9 @@ func binToBytes(s string) []byte {
 	return b
 }
 
-func sendMessage(msg string) {
+func sendMessage(msg string, port uint16) {
 	p :=  make([]byte, 2048)
-	conn, err := net.Dial("udp", "127.0.0.1:3002")
+	conn, err := net.Dial("udp", "127.0.0.1:" + strconv.Itoa(int(port)))
 	if err != nil {
 		//return err
 		fmt.Println(err)
