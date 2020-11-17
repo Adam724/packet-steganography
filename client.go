@@ -9,10 +9,11 @@ import (
 	"os"
 	"net"
 	"bufio"
+	"math"
 )
 
 var (
-    device       string = "tun0"
+    device       string = "lo"
     snapshot_len int32  = 1024
     promiscuous  bool   = false
     err          error
@@ -21,9 +22,14 @@ var (
 )
 
 func main() {
-	//go handleMessageSend()
+	if len(os.Args) < 2 {
+		fmt.Println("No message argument specified!!")
+		return
+	}
+	message := os.Args[1]
+	go handleMessageSend(message)
 
-	//Generate packets to hide message in and also send to encoder
+	//Generate packets to hide message in and send them to encoder.go
 	// Open device
 	handle, err = pcap.OpenLive(device, snapshot_len, promiscuous, timeout)
 	if err != nil {log.Fatal(err) }
@@ -93,20 +99,24 @@ func main() {
 	packet[40] = 254
 	packet[41] = 39*/
 	//packet = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 69, 0, 0, 40, 127, 234, 64, 0, 64, 17, 188, 216, 127, 0, 0, 1, 127, 0, 0, 1, 172, 67, 11, 184, 0, 20, 1, 71, 116, 101, 115, 116, 32, 109, 101, 115, 115, 97, 103, 101}
+
+	//the maximum percentage by which each packet's payload length will be increased by before hiding the next part of the message in a new packet
+	var capacity float64 = 0.3
+	//stores the number of packets to be sent to encoder.go, determined by mesage length
+	var numPackets int = int(math.Ceil(float64(len(message)) / (float64(len(payload)) * capacity)))
+	
 	fmt.Println(packet)
-	err = handle.WritePacketData(packet)
-	if err != nil {
-		log.Fatal(err)
+	fmt.Printf("Sending %d packets.\n", numPackets)
+
+	for i := 0; i < numPackets; i++ {
+		err = handle.WritePacketData(packet)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
-func handleMessageSend() {
-	//get and send message to hide to the encoder
-	if len(os.Args) < 2 {
-		fmt.Println("No message argument specified!!")
-		return
-	}
-	message := os.Args[1]
+func handleMessageSend(message string) {
 	err = sendMessage(message)
 	if err != nil {
 		log.Fatal(err)

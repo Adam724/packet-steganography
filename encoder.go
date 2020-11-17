@@ -10,7 +10,8 @@ import (
     "math/rand"
     "sort"
     "errors"
-    "strconv"
+	"strconv"
+	"math"
 )
 
 var (
@@ -39,27 +40,42 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-    fmt.Println("Only capturing UDP port 3000 packets.")
+	fmt.Println("Only capturing UDP port 3000 packets.")
+	message := make([]byte, 20)
+	var i int = 0
+	var start int = 0
+	var end int = 0
+	var high byte
+	var low byte
+	var fragment []byte
 
     packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
     for packet := range packetSource.Packets() {
-    
-    	    
 	    // Do something with a packet here.
 	    fmt.Println("Packet received")
-
-	    message := make([]byte, 20)
-	    select {
-    	    case message = <-ch:
-        	fmt.Println("received message")
-    	    default:
-		fmt.Println("no message received")
-		continue;
-    	    }
 	    
-	    fmt.Println(string(message))
+	    if i == 0 {
+		    select {
+		    case message = <-ch:
+			    fmt.Println("received message")
+			    //create and append custom header with original destination port and ip to the message
+			    high, low = split_uint16(3003)
+			    destPort := []byte{high, low}
+			    destIP := []byte{127, 0, 0, 1}
+			    high, low = split_uint16(uint16(8 + len(message)))
+			    totalLength := []byte{high, low}
+			    message = append(totalLength, message)
+			    message = append(destIP, message)
+			    message = append(destPort, message)
+			    fmt.Println(message)
+		    default:
+			    fmt.Println("no message received")
+			    return;
+		    }
+	    }
 	    
 	    rawBytes := packet.Data()
+		    
 	    
 	    ethHeader :=  rawBytes[:14]
 
@@ -72,26 +88,18 @@ func main() {
 	    udpHeader := rawBytes[ipEndIndex:udpEndIndex]
 	    payload := rawBytes[udpEndIndex:]
 
-
-	    /*csum := combine_uint16(udpHeader[6], udpHeader[7])
-	    fmt.Println(ethHeader)
-	    fmt.Println(ipHeader)
-	    fmt.Println(udpHeader)
-	    fmt.Println(payload)
-	    fmt.Println("\n")
-	    fmt.Println("Original checksum:")
-	    fmt.Println(csum)
-	    fmt.Println("\n")*/
+	    //determine how much of the message we can fit in this packet
+	    end = int(math.Ceil(float64(len(payload)) * float64(0.3))) + start
+	    if len(message) <= end {
+		    fragment = message[start:]
+	    }else{
+		    fragment = message[start:end]
+		    message = message[end:]
+	    }
 	    
-
-	    //Attempt to hide message in payload and retransmit packet
-	    
-	    /*udpHeader = []byte{11, 184, 31, 144, 0, 0, 0, 0}
-	    ipHeader = []byte{69, 0, 0, 61, 175, 205, 64, 0, 64, 17, 0, 0, 127, 0, 0, 1, 127, 0, 0, 1}*/
-
-	    
-	    fmt.Printf("payload length: %d, message length: %d\n", len(payload), len(message))
-	    newPayload, err := hideMessage(payload, message)
+	    //fmt.Printf("payload length: %d, message length: %d\n", len(payload), len(message))
+	  fmt.Println("Message to hide: ", fragment)
+	    newPayload, err := hideMessage(payload, fragment)
 	    if err != nil {
 		fmt.Println(err)
 		return
@@ -101,7 +109,7 @@ func main() {
 	    udpHeader[3] = 185
 	    packet := append(udpHeader, newPayload)
 	    length := uint16(len(packet))
-	    high, low := split_uint16(length)
+	    high, low = split_uint16(length)
 
 	    udpHeader[4] = high
 	    udpHeader[5] = low
@@ -121,8 +129,6 @@ func main() {
 	    checksum := udpChecksum(psuedoHeader, data)
 	    high, low = split_uint16(checksum)
 
-	    fmt.Printf("Message hidden, new checksum: %x\n", checksum)
-
 	    udpHeader[6] = high
 	    udpHeader[7] = low
 
@@ -135,14 +141,15 @@ func main() {
 	    packet = append(ethHeader, append(append(ipHeader, udpHeader), newPayload))
 	    //fmt.Println("New packet:")
 	    //fmt.Println(packet)
-	    fmt.Println("New payload in string form:")
-	    fmt.Println(string(newPayload))
+	    //fmt.Println("New payload in string form:")
+	    //fmt.Println(string(newPayload))
 
 	    err = handle.WritePacketData(packet)
 	    if err != nil {
 		    log.Fatal(err)
 	    }
 	    fmt.Println("Packet sent")
+	    i++
     }
 
 }
@@ -237,9 +244,6 @@ func split_uint16(num uint16) (byte, byte) {
 
 //hide message in provided payload data, append message length to end as single byte. This is necessary for extraction
 func hideMessage(data []byte, msg []byte) ([]byte, error) {
-	high, low := split_uint16(3003)
-	destPort := []byte{high, low}
-        msg = append(destPort, msg)
 	if len(msg) * 2 > len(data) {
 		return nil, errors.New("Message is too large to hide in this payload")
 	}
