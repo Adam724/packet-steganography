@@ -11,6 +11,7 @@ import (
     "strconv"
     "net"
     "bufio"
+    "strings"
 )
 
 var (
@@ -38,11 +39,17 @@ func main() {
 	}
 	fmt.Println("Only capturing UDP port 3001 packets.")
 
-	var message []byte
 	var totalLength uint16
 	var destPort uint16
 	var destIP []byte
-	var headerExtracted bool = false
+	var sequenceNumber int
+	var extractedHeader []byte
+	var extractedMsg []byte
+
+	//Buffer to store the individual messages that come in. Each piece of the secret
+	//message will be indexed by its sequence number
+	buffer := make([]string, 20)
+	
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSource.Packets() {
 		fmt.Println("Packet received!")
@@ -63,25 +70,34 @@ func main() {
 		payload = payload[:len(payload) - 1]
 		
 		extractedFragment, originalPayload := extractMessage(payload, mLen, true)
-		message = append(message, extractedFragment)
-		if len(message) > 7 && !headerExtracted {
-			fmt.Println(message)
-			destPort  = (uint16(message[0]) << 8) + uint16(message[1])
-			destIP = message[2:6]
-			totalLength = (uint16(message[6]) << 8) + uint16(message[7])
-			headerExtracted = true
-			fmt.Printf("Original destination port: %d\n", destPort)
-			fmt.Println("Original destination ip: ", destIP)
-			fmt.Println("Total message length: ", totalLength)
-		}
+		extractedHeader = extractedFragment[:9]
+		extractedMsg = extractedFragment[9:]
+		fmt.Println(extractedHeader)
+		destPort  = (uint16(extractedHeader[0]) << 8) + uint16(extractedHeader[1])
+		destIP = message[2:6]
+		totalLength = (uint16(extractedHeader[6]) << 8) + uint16(extractedHeader[7])
+		sequenceNumber = int(extractedHeader[8])
+		fmt.Printf("Original destination port: %d\n", destPort)
+		fmt.Println("Original destination ip: ", destIP)
+		fmt.Println("Total message length: ", totalLength)
+		fmt.Println("Sequence Number: ", sequenceNumber)
+
+		//Adding message segment to buffer
+		buffer[sequenceNumber] = string(extractedMsg)
+		
+		extractedHeader = make([]byte, 0)
+		extractedMsg = make([]byte, 0)
+
+		
+		
 		//fmt.Println(extractedFragment)
 		//fmt.Println("Original payload in string format: ", string(originalPayload))
 
-		if headerExtracted && uint16(len(message)) >= totalLength {
+		if uint16(len(message)) >= totalLength {
 			fmt.Println("Full message received!")
-			fmt.Println(string(message))
+			//Join the strings in buffer to print final msg
+			fmt.Println(strings.Join(buffer[:], ""))
 			message = make([]byte, 0)
-			headerExtracted = false
 		}
 
 		//Send original payload to original destination port

@@ -48,6 +48,8 @@ func main() {
 	var high byte
 	var low byte
 	var fragment []byte
+	var header []byte
+	var customPacket []byte
 
     packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
     for packet := range packetSource.Packets() {
@@ -62,18 +64,28 @@ func main() {
 			    high, low = split_uint16(3003)
 			    destPort := []byte{high, low}
 			    destIP := []byte{127, 0, 0, 1}
-			    high, low = split_uint16(uint16(8 + len(message)))
+			    high, low = split_uint16(uint16(len(message)))
 			    totalLength := []byte{high, low}
-			    message = append(totalLength, message)
-			    message = append(destIP, message)
-			    message = append(destPort, message)
-			    fmt.Println(message)
+			    header = append(totalLength, header)
+			    header = append(destIP, header)
+			    header = append(destPort, header)
+			    header = appendOne(header, byte(0))
+			    fmt.Println("Header:")
+			    fmt.Println(header)
+			    fmt.Println("\n")
 		    default:
 			    fmt.Println("no message received")
-			    return;
+			    return
 		    }
+	    }else{
+		header[8] = byte(i)
 	    }
 	    
+	    if len(message) == 0 {
+	       fmt.Println("Message finished sending!")
+	       i = 0
+	       return
+	    }
 	    rawBytes := packet.Data()
 		    
 	    
@@ -92,14 +104,18 @@ func main() {
 	    end = int(math.Ceil(float64(len(payload)) * float64(0.3))) + start
 	    if len(message) <= end {
 		    fragment = message[start:]
+		    fmt.Println("Last portion of message: ", message)
+		    message = make([]byte, 0)
 	    }else{
 		    fragment = message[start:end]
 		    message = message[end:]
 	    }
+
+	    customPacket = append(header, fragment)
 	    
-	    //fmt.Printf("payload length: %d, message length: %d\n", len(payload), len(message))
-	  fmt.Println("Message to hide: ", fragment)
-	    newPayload, err := hideMessage(payload, fragment)
+	  fmt.Printf("payload length: %d, message length: %d\n", len(payload), len(fragment))
+	  fmt.Println("Message to hide: ", customPacket)
+	    newPayload, err := hideMessage(payload, customPacket)
 	    if err != nil {
 		fmt.Println(err)
 		return

@@ -104,6 +104,7 @@ func main() {
 	var capacity float64 = 0.3
 	//stores the number of packets to be sent to encoder.go, determined by mesage length
 	var numPackets int = int(math.Ceil(float64(len(message)) / (float64(len(payload)) * capacity)))
+	numPackets += int(math.Ceil(float64(numPackets * 9) / (float64(len(payload)) * capacity)))
 	
 	fmt.Println(packet)
 	fmt.Printf("Sending %d packets.\n", numPackets)
