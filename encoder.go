@@ -43,7 +43,6 @@ func main() {
 	fmt.Println("Only capturing UDP port 3000 packets.")
 	message := make([]byte, 20)
 	var i int = 0
-	var start int = 0
 	var end int = 0
 	var high byte
 	var low byte
@@ -60,6 +59,7 @@ func main() {
 		    select {
 		    case message = <-ch:
 			    fmt.Println("received message")
+			    header = make([]byte, 0)
 			    //create and append custom header with original destination port and ip to the message
 			    high, low = split_uint16(3003)
 			    destPort := []byte{high, low}
@@ -81,11 +81,6 @@ func main() {
 		header[8] = byte(i)
 	    }
 	    
-	    if len(message) == 0 {
-	       fmt.Println("Message finished sending!")
-	       i = 0
-	       return
-	    }
 	    rawBytes := packet.Data()
 		    
 	    
@@ -101,13 +96,19 @@ func main() {
 	    payload := rawBytes[udpEndIndex:]
 
 	    //determine how much of the message we can fit in this packet
-	    end = int(math.Ceil(float64(len(payload)) * float64(0.3))) + start
-	    if len(message) <= end {
-		    fragment = message[start:]
+	    end = int(math.Ceil(float64(len(payload)) * float64(0.3))) - 9
+	    if end < 1 {
+		    //not enough space to fit any part of message with 9 byte header, so set minimum amount that can be hidden to 8 bytes (17 bytes in total with header
+		    fragment = message[:8]
+		    message = message[8:]
+	    } else if len(message) <= end {
+		    fragment = message
+		    end = 0
+		    i = -1
 		    fmt.Println("Last portion of message: ", message)
 		    message = make([]byte, 0)
 	    }else{
-		    fragment = message[start:end]
+		    fragment = message[:end]
 		    message = message[end:]
 	    }
 

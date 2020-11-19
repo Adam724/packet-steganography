@@ -40,6 +40,7 @@ func main() {
 	fmt.Println("Only capturing UDP port 3001 packets.")
 
 	var totalLength uint16
+	var currLength uint16 = 0
 	var destPort uint16
 	var destIP []byte
 	var sequenceNumber int
@@ -74,7 +75,7 @@ func main() {
 		extractedMsg = extractedFragment[9:]
 		fmt.Println(extractedHeader)
 		destPort  = (uint16(extractedHeader[0]) << 8) + uint16(extractedHeader[1])
-		destIP = message[2:6]
+		destIP = extractedHeader[2:6]
 		totalLength = (uint16(extractedHeader[6]) << 8) + uint16(extractedHeader[7])
 		sequenceNumber = int(extractedHeader[8])
 		fmt.Printf("Original destination port: %d\n", destPort)
@@ -84,6 +85,7 @@ func main() {
 
 		//Adding message segment to buffer
 		buffer[sequenceNumber] = string(extractedMsg)
+		currLength += uint16(len(extractedMsg))
 		
 		extractedHeader = make([]byte, 0)
 		extractedMsg = make([]byte, 0)
@@ -93,11 +95,11 @@ func main() {
 		//fmt.Println(extractedFragment)
 		//fmt.Println("Original payload in string format: ", string(originalPayload))
 
-		if uint16(len(message)) >= totalLength {
+		if currLength >= totalLength {
 			fmt.Println("Full message received!")
 			//Join the strings in buffer to print final msg
 			fmt.Println(strings.Join(buffer[:], ""))
-			message = make([]byte, 0)
+			//message = make([]byte, 0)
 		}
 
 		//Send original payload to original destination port
