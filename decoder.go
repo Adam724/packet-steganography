@@ -116,7 +116,7 @@ func main() {
 			   if err != nil {
 			      log.Fatalln(err)
 			   }
-			   out, _ := os.Create("./img.jpg")
+			   out, _ := os.Create("./img.jpeg")
 			   defer out.Close()
 
 			   var opts jpeg.Options

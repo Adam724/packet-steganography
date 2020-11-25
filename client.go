@@ -10,6 +10,9 @@ import (
 	"net"
 	"bufio"
 	"math"
+	"image/jpeg"
+	"bytes"
+	"image"
 )
 
 var (
@@ -41,15 +44,16 @@ func main() {
 	      os.Exit(1)
 	   }
 	   defer file.Close()
-	   fileInfo, _ := file.Stat()
-	   var size int64 = fileInfo.Size()
-	   bytes := make([]byte, size)
 	   
-	   // read file into bytes
-	   buffer := bufio.NewReader(file)
-	   _, err = buffer.Read(bytes)
-	   
-	   message = bytes
+	   img, _, err := image.Decode(bufio.NewReader(file))
+	   if err != nil {
+	      fmt.Println(err)
+	      os.Exit(1)
+	   }
+
+	   buf := new(bytes.Buffer)
+	   err = jpeg.Encode(buf, img, nil)
+	   message = buf.Bytes()
 
 	}else{
 	   fmt.Println("Please specify a mode from the options below:\n-m to send a message\n-i to send an image")
