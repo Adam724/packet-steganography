@@ -99,7 +99,8 @@ func main() {
 			fmt.Println("Full message received!")
 			//Join the strings in buffer to print final msg
 			fmt.Println(strings.Join(buffer[:], ""))
-			//message = make([]byte, 0)
+			currLength = 0
+			buffer = make([]string, 20)
 		}
 
 		//Send original payload to original destination port

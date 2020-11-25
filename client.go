@@ -102,22 +102,10 @@ func main() {
 
 	//the maximum percentage by which each packet's payload length will be increased by before hiding the next part of the message in a new packet
 	var capacity float64 = 0.3
-	var numPacksFloat float64 = float64(len(message)) / (float64(len(payload)) * capacity)
-	fmt.Println(numPacksFloat)
-	//stores the number of packets to be sent to encoder.go, determined by mesage length
-var numPackets int = int(math.Ceil(numPacksFloat))
-	numPacksFloat += float64(numPacksFloat * 9) / (float64(len(payload)) * capacity)
-	fmt.Println(numPacksFloat)
-	var newNumPackets = int(math.Ceil(numPacksFloat))
-
-	//adding total headers length may have increased number of packets send, each with their own header of 9 bytes. This may require more packets to be sent, loop until it doesn't
-	var diff int = 0
-	for newNumPackets > numPackets {
-		diff = newNumPackets - numPackets
-		numPackets = newNumPackets
-		numPacksFloat += float64(diff * 9) / (float64(len(payload)) * capacity)
-		newNumPackets = int(math.Ceil(numPacksFloat))
-	}
+	
+	var maxMsgLen int = int(math.Ceil(float64(len(payload)) * capacity)) - 9
+	var numPackets int = int(math.Ceil(float64(len(message)) / float64(maxMsgLen)))
+	
 	
 	fmt.Println(packet)
 	fmt.Printf("Sending %d packets.\n", numPackets)
