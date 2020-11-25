@@ -11,7 +11,11 @@ import (
     "strconv"
     "net"
     "bufio"
-    "strings"
+    //"strings"
+    "os"
+    "image/jpeg"
+    "image"
+    "bytes"
 )
 
 var (
@@ -46,10 +50,11 @@ func main() {
 	var sequenceNumber int
 	var extractedHeader []byte
 	var extractedMsg []byte
+	var mode int
 
 	//Buffer to store the individual messages that come in. Each piece of the secret
 	//message will be indexed by its sequence number
-	buffer := make([]string, 100)
+	buffer := make([]byte, 10000)
 	
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSource.Packets() {
@@ -70,12 +75,13 @@ func main() {
 		payload = payload[:len(payload) - 1]
 		
 		extractedFragment, originalPayload := extractMessage(payload, mLen, true)
-		extractedHeader = extractedFragment[:9]
-		extractedMsg = extractedFragment[9:]
+		extractedHeader = extractedFragment[:10]
+		extractedMsg = extractedFragment[10:]
 		destPort  = (uint16(extractedHeader[0]) << 8) + uint16(extractedHeader[1])
 		destIP = extractedHeader[2:6]
 		totalLength = (uint16(extractedHeader[6]) << 8) + uint16(extractedHeader[7])
 		sequenceNumber = int(extractedHeader[8])
+		mode = int(extractedHeader[9])
 
 		fmt.Printf("***Packet with sequence number %d was received***\n", sequenceNumber)
 		fmt.Printf("Original destination port: %d\n", destPort)
@@ -86,9 +92,9 @@ func main() {
 		
 
 		//Adding message segment to buffer
-		buffer[sequenceNumber] = string(extractedMsg)
+		buffer = append(buffer, extractedMsg)
 		currLength += uint16(len(extractedMsg))
-		fmt.Printf("We are still missing %d bytes from the hidden message.\n", (totalLength-currLength))
+		fmt.Printf("We have read %d bytes and are waiting for %d more bytes.\n", currLength, (totalLength-currLength))
 		fmt.Println("------------------------------------------\n")
 		
 		extractedHeader = make([]byte, 0)
@@ -101,12 +107,34 @@ func main() {
 
 		if currLength >= totalLength {
 			fmt.Println("Full message received:")
-			//Join the strings in buffer to print final msg
-			fmt.Println(strings.Join(buffer[:], ""))
+			if mode == 1 {
+			   //Print message
+			   fmt.Println(string(buffer))
+			}else if mode == 2 {
+			   //Store image
+			   img, _, err := image.Decode(bytes.NewReader(buffer))
+			   if err != nil {
+			      log.Fatalln(err)
+			   }
+			   out, _ := os.Create("./img.jpg")
+			   defer out.Close()
+
+			   var opts jpeg.Options
+			   opts.Quality = 1
+
+			   err = jpeg.Encode(out, img, &opts)
+
+			   if err != nil {
+			      log.Println(err)
+			   }
+			   
+			}
+			
 			fmt.Println("------------------------------------------\n\n")
 			currLength = 0
-			buffer = make([]string, 20)
+			buffer = make([]byte, 10000)
 		}
+
 
 		//Send original payload to original destination port
 		go sendMessage(string(originalPayload), destPort, sequenceNumber)

@@ -41,7 +41,7 @@ func main() {
         log.Fatal(err)
     }
 	fmt.Println("Only capturing UDP port 3000 packets.\n")
-	message := make([]byte, 20)
+	message := make([]byte, 10000)
 	var i int = 0
 	var end int = 0
 	var high byte
@@ -58,6 +58,9 @@ func main() {
 		    select {
 		    case message = <-ch:
 			    header = make([]byte, 0)
+			    mode := int(message[0])
+			    //fmt.Println("mode: ", mode)
+			    message = message[1:]
 			    //create and append custom header with original destination port and ip to the message
 			    high, low = split_uint16(3003)
 			    destPort := []byte{high, low}
@@ -68,6 +71,7 @@ func main() {
 			    header = append(destIP, header)
 			    header = append(destPort, header)
 			    header = appendOne(header, byte(0))
+			    header = appendOne(header, byte(mode))
 			    fmt.Println("\nCustom Header:")
 			    fmt.Println(header)
 			    fmt.Println("\n")
@@ -94,10 +98,10 @@ func main() {
 	    payload := rawBytes[udpEndIndex:]
 
 	    //determine how much of the message we can fit in this packet
-	    end = int(math.Ceil(float64(len(payload)) * float64(0.3))) - 9
+	    end = int(math.Ceil(float64(len(payload)) * float64(0.3))) - 10
 	    var bytesSent int
 	    if end < 1 {
-		    //not enough space to fit any part of message with 9 byte header, so set minimum amount that can be hidden to 8 bytes (17 bytes in total with header
+		    //not enough space to fit any part of message with 9 byte header, so set minimum amount that can be hidden to 8 bytes (18 bytes in total with header
 		    fragment = message[:8]
 		    message = message[8:]
 		    bytesSent = 8
@@ -158,7 +162,7 @@ func main() {
 	    //fmt.Println("New packet:")
 	    //fmt.Println(packet)
 
-
+	    
 	    fmt.Printf("***Packet with sequence number %d***\n", sequenceNumber)
 	    fmt.Println("Original Payload:")
 	    fmt.Println(string(payload))
@@ -166,7 +170,7 @@ func main() {
 	    fmt.Printf("New payload with %d bytes of message embedded:\n", bytesSent)
 	    fmt.Println(string(newPayload))
 	    fmt.Println("------------------------------------------\n")
-
+	    
 	    if i == -1 {
 	       fmt.Println("Full Message has been sent.\n")
 	    }
@@ -194,7 +198,7 @@ func handleMessageRead(c chan []byte) {
 }
 
 func listenUDPMessage(port int, c chan []byte) (error) {
-	p := make([]byte, 1024)
+	p := make([]byte, 10000)
 	addr := net.UDPAddr{
 		Port: port,
 		IP: net.ParseIP("127.0.0.1"),

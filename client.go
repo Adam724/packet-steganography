@@ -21,17 +21,18 @@ var (
     handle       *pcap.Handle
 )
 
-// STRESS TESTED: Maximum message size is 160 characters. Decoder breaks otherwise.
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Println("Please specify a mode:\n-m to send a message\n-i to send an image\n\nAnd context:\nA message\nA path to an image\n")
 		return
 	}
-	var message string
+	var mode int
+	var message []byte
 	if os.Args[1] == "-m" {
-	   message = os.Args[2]
-	   
+	   message = []byte(os.Args[2])
+	   mode = 1
 	}else if os.Args[1] == "-i" {
+	   mode = 2
 
 	   // Upload an image
 	   file, err := os.Open(os.Args[2])
@@ -48,15 +49,16 @@ func main() {
 	   buffer := bufio.NewReader(file)
 	   _, err = buffer.Read(bytes)
 	   
-	   message = string(bytes)
+	   message = bytes
 
 	}else{
 	   fmt.Println("Please specify a mode from the options below:\n-m to send a message\n-i to send an image")
 	   return
 	}
 	
-	go handleMessageSend(message)
-	fmt.Println("\nMessage has been sent to encoder.")
+	fmt.Println("\nMessage inputted succesfully, length: ", len(message))
+	go handleMessageSend(message, mode)
+	fmt.Println("Message has been sent to encoder.")
 	
 	//Generate packets to hide message in and send them to encoder.go
 	// Open device
@@ -131,7 +133,7 @@ func main() {
 	//the maximum percentage by which each packet's payload length will be increased by before hiding the next part of the message in a new packet
 	var capacity float64 = 0.3
 	
-	var maxMsgLen int = int(math.Ceil(float64(len(payload)) * capacity)) - 9
+	var maxMsgLen int = int(math.Ceil(float64(len(payload)) * capacity)) - 10
 	var numPackets int = int(math.Ceil(float64(len(message)) / float64(maxMsgLen)))
 	
 	
@@ -146,8 +148,9 @@ func main() {
 	fmt.Printf("%d dummy packets have been sent to encoder.\n\n", numPackets)
 }
 
-func handleMessageSend(message string) {
-	err = sendMessage(message)
+func handleMessageSend(message []byte, mode int) {
+     	//fmt.Println(string(mode)+message)
+	err = sendMessage(append([]byte{byte(mode)}, message))
 	if err != nil {
 		log.Fatal(err)
 		return
@@ -156,13 +159,14 @@ func handleMessageSend(message string) {
 }
 
 
-func sendMessage(msg string) error {
+func sendMessage(msg []byte) error {
 	p :=  make([]byte, 2048)
 	conn, err := net.Dial("udp", "127.0.0.1:6000")
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(conn, msg)
+	//fmt.Fprintf(conn, msg)
+	conn.Write(msg)
 	_, err = bufio.NewReader(conn).Read(p)
 	if err == nil {
 		fmt.Printf("%s\n", p)
