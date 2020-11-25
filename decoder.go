@@ -49,11 +49,10 @@ func main() {
 
 	//Buffer to store the individual messages that come in. Each piece of the secret
 	//message will be indexed by its sequence number
-	buffer := make([]string, 20)
+	buffer := make([]string, 100)
 	
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSource.Packets() {
-		fmt.Println("Packet received!")
 		rawBytes := packet.Data()
 	    
 		//ethHeader :=  rawBytes[:14]
@@ -73,19 +72,24 @@ func main() {
 		extractedFragment, originalPayload := extractMessage(payload, mLen, true)
 		extractedHeader = extractedFragment[:9]
 		extractedMsg = extractedFragment[9:]
-		fmt.Println(extractedHeader)
 		destPort  = (uint16(extractedHeader[0]) << 8) + uint16(extractedHeader[1])
 		destIP = extractedHeader[2:6]
 		totalLength = (uint16(extractedHeader[6]) << 8) + uint16(extractedHeader[7])
 		sequenceNumber = int(extractedHeader[8])
+
+		fmt.Printf("***Packet with sequence number %d was received***\n", sequenceNumber)
 		fmt.Printf("Original destination port: %d\n", destPort)
 		fmt.Println("Original destination ip: ", destIP)
-		fmt.Println("Total message length: ", totalLength)
-		fmt.Println("Sequence Number: ", sequenceNumber)
+
+		
+		
+		
 
 		//Adding message segment to buffer
 		buffer[sequenceNumber] = string(extractedMsg)
 		currLength += uint16(len(extractedMsg))
+		fmt.Printf("We are still missing %d bytes from the hidden message.\n", (totalLength-currLength))
+		fmt.Println("------------------------------------------\n")
 		
 		extractedHeader = make([]byte, 0)
 		extractedMsg = make([]byte, 0)
@@ -96,15 +100,16 @@ func main() {
 		//fmt.Println("Original payload in string format: ", string(originalPayload))
 
 		if currLength >= totalLength {
-			fmt.Println("Full message received!")
+			fmt.Println("Full message received:")
 			//Join the strings in buffer to print final msg
 			fmt.Println(strings.Join(buffer[:], ""))
+			fmt.Println("------------------------------------------\n\n")
 			currLength = 0
 			buffer = make([]string, 20)
 		}
 
 		//Send original payload to original destination port
-		go sendMessage(string(originalPayload), destPort)
+		go sendMessage(string(originalPayload), destPort, sequenceNumber)
 		
 		
 	}
@@ -162,12 +167,12 @@ func binToBytes(s string) []byte {
 	return b
 }
 
-func sendMessage(msg string, port uint16) {
+func sendMessage(msg string, port uint16, sequenceNumber int) {
 	p :=  make([]byte, 2048)
 	conn, err := net.Dial("udp", "127.0.0.1:" + strconv.Itoa(int(port)))
 	if err != nil {
 		//return err
-		fmt.Println(err)
+		fmt.Printf("!! Error sending packet with sequence number %d to original destination !!\n", sequenceNumber)
 	}
 	fmt.Fprintf(conn, msg)
 	_, err = bufio.NewReader(conn).Read(p)
@@ -175,7 +180,7 @@ func sendMessage(msg string, port uint16) {
 		fmt.Printf("%s\n", p)
 	} else {
 		//return err
-		fmt.Println(err)
+		fmt.Printf("!! Error sending packet with sequence number %d to original destination !!\n", sequenceNumber)
 	}
 	conn.Close()
 	//return nil

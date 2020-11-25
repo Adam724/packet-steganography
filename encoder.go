@@ -40,7 +40,7 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-	fmt.Println("Only capturing UDP port 3000 packets.")
+	fmt.Println("Only capturing UDP port 3000 packets.\n")
 	message := make([]byte, 20)
 	var i int = 0
 	var end int = 0
@@ -53,12 +53,10 @@ func main() {
     packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
     for packet := range packetSource.Packets() {
 	    // Do something with a packet here.
-	    fmt.Println("Packet received")
-	    
+	    sequenceNumber := i
 	    if i == 0 {
 		    select {
 		    case message = <-ch:
-			    fmt.Println("received message")
 			    header = make([]byte, 0)
 			    //create and append custom header with original destination port and ip to the message
 			    high, low = split_uint16(3003)
@@ -70,7 +68,7 @@ func main() {
 			    header = append(destIP, header)
 			    header = append(destPort, header)
 			    header = appendOne(header, byte(0))
-			    fmt.Println("Header:")
+			    fmt.Println("\nCustom Header:")
 			    fmt.Println(header)
 			    fmt.Println("\n")
 		    default:
@@ -97,25 +95,26 @@ func main() {
 
 	    //determine how much of the message we can fit in this packet
 	    end = int(math.Ceil(float64(len(payload)) * float64(0.3))) - 9
+	    var bytesSent int
 	    if end < 1 {
 		    //not enough space to fit any part of message with 9 byte header, so set minimum amount that can be hidden to 8 bytes (17 bytes in total with header
 		    fragment = message[:8]
 		    message = message[8:]
+		    bytesSent = 8
 	    } else if len(message) <= end {
 		    fragment = message
 		    end = 0
 		    i = -1
-		    fmt.Println("Last portion of message: ", message)
+		    bytesSent = len(fragment)
 		    message = make([]byte, 0)
 	    }else{
 		    fragment = message[:end]
 		    message = message[end:]
+		    bytesSent = end
 	    }
 
 	    customPacket = append(header, fragment)
 	    
-	  fmt.Printf("payload length: %d, message length: %d\n", len(payload), len(fragment))
-	  fmt.Println("Message to hide: ", customPacket)
 	    newPayload, err := hideMessage(payload, customPacket)
 	    if err != nil {
 		fmt.Println(err)
@@ -158,14 +157,27 @@ func main() {
 	    packet = append(ethHeader, append(append(ipHeader, udpHeader), newPayload))
 	    //fmt.Println("New packet:")
 	    //fmt.Println(packet)
-	    //fmt.Println("New payload in string form:")
-	    //fmt.Println(string(newPayload))
+
+
+	    fmt.Printf("***Packet with sequence number %d***\n", sequenceNumber)
+	    fmt.Println("Original Payload:")
+	    fmt.Println(string(payload))
+	    fmt.Printf("\n")
+	    fmt.Printf("New payload with %d bytes of message embedded:\n", bytesSent)
+	    fmt.Println(string(newPayload))
+	    fmt.Println("------------------------------------------\n")
+
+	    if i == -1 {
+	       fmt.Println("Full Message has been sent.\n")
+	    }
+	    
 
 	    err = handle.WritePacketData(packet)
 	    if err != nil {
 		    log.Fatal(err)
 	    }
-	    fmt.Println("Packet sent")
+	    
+	    
 	    i++
     }
 
@@ -202,8 +214,7 @@ func listenUDPMessage(port int, c chan []byte) (error) {
 }
 
 
-func udpChecksum(phdr []byte, data []byte) uint16 {
-	//compute 16 bit sum of pseudoheader and data. Data consists of udp header and payload
+func udpChecksum(phdr []byte, data []byte) uint16 {	//compute 16 bit sum of pseudoheader and data. Data consists of udp header and payload
 	var sum32 uint32 = sum16(data) + sum16(phdr)
 
 	//convert uint32 to uint16 by repeatedly adding carries

@@ -21,14 +21,43 @@ var (
     handle       *pcap.Handle
 )
 
+// STRESS TESTED: Maximum message size is 160 characters. Decoder breaks otherwise.
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("No message argument specified!!")
+	if len(os.Args) < 3 {
+		fmt.Println("Please specify a mode:\n-m to send a message\n-i to send an image\n\nAnd context:\nA message\nA path to an image\n")
 		return
 	}
-	message := os.Args[1]
-	go handleMessageSend(message)
+	var message string
+	if os.Args[1] == "-m" {
+	   message = os.Args[2]
+	   
+	}else if os.Args[1] == "-i" {
 
+	   // Upload an image
+	   file, err := os.Open(os.Args[2])
+	   if err != nil {
+	      fmt.Println(err)
+	      os.Exit(1)
+	   }
+	   defer file.Close()
+	   fileInfo, _ := file.Stat()
+	   var size int64 = fileInfo.Size()
+	   bytes := make([]byte, size)
+	   
+	   // read file into bytes
+	   buffer := bufio.NewReader(file)
+	   _, err = buffer.Read(bytes)
+	   
+	   message = string(bytes)
+
+	}else{
+	   fmt.Println("Please specify a mode from the options below:\n-m to send a message\n-i to send an image")
+	   return
+	}
+	
+	go handleMessageSend(message)
+	fmt.Println("\nMessage has been sent to encoder.")
+	
 	//Generate packets to hide message in and send them to encoder.go
 	// Open device
 	handle, err = pcap.OpenLive(device, snapshot_len, promiscuous, timeout)
@@ -76,7 +105,6 @@ func main() {
 	checksum := calcChecksum(csum, data)
 	high, low = split_uint16(checksum)
 
-	fmt.Println(checksum)
 
 	udpHeader[6] = high
 	udpHeader[7] = low
@@ -107,8 +135,7 @@ func main() {
 	var numPackets int = int(math.Ceil(float64(len(message)) / float64(maxMsgLen)))
 	
 	
-	fmt.Println(packet)
-	fmt.Printf("Sending %d packets.\n", numPackets)
+	
 
 	for i := 0; i < numPackets; i++ {
 		err = handle.WritePacketData(packet)
@@ -116,6 +143,7 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+	fmt.Printf("%d dummy packets have been sent to encoder.\n\n", numPackets)
 }
 
 func handleMessageSend(message string) {
@@ -124,6 +152,7 @@ func handleMessageSend(message string) {
 		log.Fatal(err)
 		return
 	}
+	
 }
 
 
