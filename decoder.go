@@ -34,7 +34,7 @@ func main() {
 	}
 	defer handle.Close()
 
-	// Set filter
+	// Set filter to only listen for packets from port 3001 (encoder.go)
 	var filter string = "udp and port 3001"
 	err = handle.SetBPFFilter(filter)
 	if err != nil {
@@ -46,7 +46,7 @@ func main() {
 	var currLength uint16 = 0
 	var destPort uint16
 	var destIP []byte
-	var sequenceNumber int
+	var sequenceNumber uint16
 	var extractedHeader []byte
 	var extractedMsg []byte
 	var mode int
@@ -58,38 +58,37 @@ func main() {
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSource.Packets() {
 		rawBytes := packet.Data()
-	    
-		//ethHeader :=  rawBytes[:14]
 
 		//Length of ipHeader in 4 byte words
 		ipLen := rawBytes[14] & 0b1111
+		
 		ipEndIndex := 14 + (4 * ipLen)
-		//ipHeader := rawBytes[14:ipEndIndex]
-
 		udpEndIndex := ipEndIndex + 8
-		//udpHeader := rawBytes[ipEndIndex:udpEndIndex]
+
+		//get the packet payload
 		payload := rawBytes[udpEndIndex:]
 
+		//length of the message hidden in this packet
 		mLen := uint16(payload[len(payload) - 1])
 		payload = payload[:len(payload) - 1]
-		
+
+		//extract the portion of message hidden in this payload (contains custom header)
 		extractedFragment, originalPayload := extractMessage(payload, mLen, true)
-		extractedHeader = extractedFragment[:10]
-		extractedMsg = extractedFragment[10:]
+		
+		//get the fields from extracted custom header
+		extractedHeader = extractedFragment[:11]
+		extractedMsg = extractedFragment[11:]
 		destPort  = (uint16(extractedHeader[0]) << 8) + uint16(extractedHeader[1])
 		destIP = extractedHeader[2:6]
 		totalLength = (uint16(extractedHeader[6]) << 8) + uint16(extractedHeader[7])
-		sequenceNumber = int(extractedHeader[8])
-		mode = int(extractedHeader[9])
+		sequenceNumber = (uint16(extractedHeader[8]) << 8) + uint16(extractedHeader[9])
+		mode = int(extractedHeader[10])
 
 		fmt.Printf("***Packet with sequence number %d was received***\n", sequenceNumber)
 		fmt.Printf("Original destination port: %d\n", destPort)
 		fmt.Println("Original destination ip: ", destIP)
 
 		
-		
-		
-
 		//Adding message segment to buffer
 		buffer = append(buffer, extractedMsg)
 		currLength += uint16(len(extractedMsg))
@@ -98,19 +97,14 @@ func main() {
 		
 		extractedHeader = make([]byte, 0)
 		extractedMsg = make([]byte, 0)
-
 		
-		
-		//fmt.Println(extractedFragment)
-		//fmt.Println("Original payload in string format: ", string(originalPayload))
-
 		if currLength >= totalLength {
 			fmt.Println("Full message received:")
+			//interpret as text message
 			if mode == 1 {
 			   //Print message
 			   fmt.Println(string(buffer))
-			}else if mode == 2 {
-				//fmt.Println(buffer)
+			}else if mode == 2 { //interpret as jpeg image
 			   //Store image
 			   img, err := jpeg.Decode(bytes.NewReader(buffer))
 			   if err != nil {
@@ -120,7 +114,7 @@ func main() {
 			   defer out.Close()
 
 			   var opts jpeg.Options
-			   opts.Quality = 100
+			   opts.Quality = 100 //1-100, 100 is best quality
 
 			   err = jpeg.Encode(out, img, &opts)
 
@@ -137,7 +131,7 @@ func main() {
 
 
 		//Send original payload to original destination port
-		go sendMessage(string(originalPayload), destPort, sequenceNumber)
+		go sendMessage(string(originalPayload), destPort, int(sequenceNumber))
 		
 		
 	}
@@ -148,25 +142,25 @@ func extractMessage(data []byte, msgLen uint16, setSeed bool) (extractedMsg []by
 	dataBinStr := bytesToBin(data)
 	numBits := int(msgLen) * 8
 	if setSeed {
-		rand.Seed(1111)
+		rand.Seed(1111) //MUST be same as in encoder.go
 	}
-	
+
 	var randPositions = make([]int, numBits, numBits)
-	
+
+	//get postions where each bit of message is hidden
 	for i := 0; i < numBits; i++ {
 		randIndex := rand.Intn(len(dataBinStr) - numBits + i)
 		randPositions[i] = randIndex
 	}
 	sort.Ints(randPositions)
 
+	//extract the bits and return resulting hidden message
 	newStr := dataBinStr
 	msgBin := ""
 	for i := numBits - 1; i >= 0; i-- {
-		//fmt.Printf("%s, ", newStr)
 		bit, altered := extractBit(newStr, randPositions[i])
 		newStr = altered
 		msgBin = bit + msgBin
-		//fmt.Printf("%d, %s\n", randPositions[i], bit)
 	}
 	return binToBytes(msgBin), binToBytes(newStr)
 }

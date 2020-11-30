@@ -1,7 +1,6 @@
 package main
 
 import (
-       
 	"github.com/google/gopacket/pcap"
 	"fmt"
 	"log"
@@ -16,7 +15,7 @@ import (
 )
 
 var (
-    device       string = "lo"
+    device       string = "lo" //loopback device, for local testing
     snapshot_len int32  = 1024
     promiscuous  bool   = false
     err          error
@@ -31,30 +30,33 @@ func main() {
 	}
 	var mode int
 	var message []byte
+
+	//client wants to send a text message
 	if os.Args[1] == "-m" {
 	   message = []byte(os.Args[2])
 	   mode = 1
-	}else if os.Args[1] == "-i" {
-	   mode = 2
+	}else if os.Args[1] == "-i" { //client wants to send an image
+		mode = 2
 
-	   // Upload an image
-	   file, err := os.Open(os.Args[2])
-	   if err != nil {
-	      fmt.Println(err)
-	      os.Exit(1)
-	   }
-	   defer file.Close()
-	   
-	   img, _, err := image.Decode(bufio.NewReader(file))
-	   if err != nil {
-	      fmt.Println(err)
-	      os.Exit(1)
-	   }
+		//Open specified image file
+		file, err := os.Open(os.Args[2])
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		defer file.Close()
 
-	   buf := new(bytes.Buffer)
-	   err = jpeg.Encode(buf, img, nil)
+		//Read the image file and get image object
+		img, _, err := image.Decode(bufio.NewReader(file))
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		//buffer to hold raw bytes of image
+		buf := new(bytes.Buffer)
+		err = jpeg.Encode(buf, img, nil)
 		message = buf.Bytes()
-		//fmt.Println(message)
 
 	}else{
 	   fmt.Println("Please specify a mode from the options below:\n-m to send a message\n-i to send an image")
@@ -62,17 +64,21 @@ func main() {
 	}
 	
 	fmt.Println("\nMessage inputted succesfully, length: ", len(message))
+
+	//synchronous function to send the message (raw image bytes or ascii message) to encoder.go
 	go handleMessageSend(message, mode)
 	fmt.Println("Message has been sent to encoder.")
 	
-	//Generate packets to hide message in and send them to encoder.go
-	// Open device
+	//-----Generate packets to hide message in and send them to encoder.go-----
+	
+	// Open device to eventually send packets
 	handle, err = pcap.OpenLive(device, snapshot_len, promiscuous, timeout)
 	if err != nil {log.Fatal(err) }
 	defer handle.Close()
 
+	//contents of dummy packets, longer payloads will allow for larger portions of the message to be hidden in them
 	payload := []byte("this is a test message for steganography blah blah blah")
-
+	
 	ethHeader := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0}
 
 	//version: 4, header length(in 4 byte words): 5, TOS: 0, Length: ?, identifier: ?, flags: 4,
@@ -111,39 +117,31 @@ func main() {
 	csum := sum16(pseudoHeader)
 	checksum := calcChecksum(csum, data)
 	high, low = split_uint16(checksum)
-
-
 	udpHeader[6] = high
 	udpHeader[7] = low
 
 	//calculate and set ip header checksum
 	checksum = calcChecksum(0, ipHeader)
 	high, low = split_uint16(checksum)
-
 	ipHeader[10] = high
 	ipHeader[11] = low
 
-	//all header fields have been calculated/populated, so reconstruct packet
+	//all header fields have been calculated/populated, so reconstruct full packet
 	packet = append(ethHeader, append(append(ipHeader, udpHeader), payload))
-	/*packet[18] = 119
-	packet[19] = 254
-	packet[24] = 196
-	packet[25] = 196
-	packet[34] = 143
-	packet[35] = 109
-	packet[40] = 254
-	packet[41] = 39*/
-	//packet = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 69, 0, 0, 40, 127, 234, 64, 0, 64, 17, 188, 216, 127, 0, 0, 1, 127, 0, 0, 1, 172, 67, 11, 184, 0, 20, 1, 71, 116, 101, 115, 116, 32, 109, 101, 115, 115, 97, 103, 101}
 
 	//the maximum percentage by which each packet's payload length will be increased by before hiding the next part of the message in a new packet
 	var capacity float64 = 0.3
-	
-	var maxMsgLen int = int(math.Ceil(float64(len(payload)) * capacity)) - 10
-	var numPackets int = int(math.Ceil(float64(len(message)) / float64(maxMsgLen)))
-	
-	
-	
 
+	//determine how much of the message can be hidden in the dummy packet (not including 11 byte header), minimum 8 bytes
+	var maxMsgLen int = int(math.Ceil(float64(len(payload)) * capacity)) - 11
+	if maxMsgLen < 8 {
+		maxMsgLen = 8
+	}
+
+	//calculate how many dummy packets must be sent to encoder.go
+	var numPackets int = int(math.Ceil(float64(len(message)) / float64(maxMsgLen)))
+
+	//send correct number of packets to encoder.go
 	for i := 0; i < numPackets; i++ {
 		err = handle.WritePacketData(packet)
 		if err != nil {
@@ -163,7 +161,7 @@ func handleMessageSend(message []byte, mode int) {
 	
 }
 
-
+//sends given message to encoder.go at port 6000
 func sendMessage(msg []byte) error {
 	p :=  make([]byte, 2048)
 	conn, err := net.Dial("udp", "127.0.0.1:6000")

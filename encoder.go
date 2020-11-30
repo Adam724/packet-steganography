@@ -1,15 +1,15 @@
 package main
 
 import (
-    "fmt"
-    "github.com/google/gopacket"
-    "github.com/google/gopacket/pcap"
-    "log"
-    "time"
-    "net"
-    "math/rand"
-    "sort"
-    "errors"
+	"fmt"
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/pcap"
+	"log"
+	"time"
+	"net"
+	"math/rand"
+	"sort"
+	"errors"
 	"strconv"
 	"math"
 )
@@ -24,23 +24,25 @@ var (
 )
 
 func main() {
+	//create go channel for message and wait to receive from client.go (synchronously)
 	ch := make(chan []byte)
 	go handleMessageRead(ch)
 	
-    // Open device
-    handle, err = pcap.OpenLive(device, snapshot_len, promiscuous, timeout)
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer handle.Close()
+	// Open device
+	handle, err = pcap.OpenLive(device, snapshot_len, promiscuous, timeout)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer handle.Close()
 
-    // Set filter
-    var filter string = "udp and port 3000"
-    err = handle.SetBPFFilter(filter)
-    if err != nil {
-        log.Fatal(err)
-    }
+	// Set filter, only listen for packets coming from port 3000 (client.go)
+	var filter string = "udp and port 3000"
+	err = handle.SetBPFFilter(filter)
+	if err != nil {
+		log.Fatal(err)
+	}
 	fmt.Println("Only capturing UDP port 3000 packets.\n")
+	
 	message := make([]byte, 10000)
 	var i int = 0
 	var end int = 0
@@ -54,37 +56,50 @@ func main() {
     for packet := range packetSource.Packets() {
 	    // Do something with a packet here.
 	    sequenceNumber := i
+
+	    //this is the first packet received from client.go
 	    if i == 0 {
 		    select {
 		    case message = <-ch:
 			    header = make([]byte, 0)
+
+			    //determine if text message or image is being sent
 			    mode := int(message[0])
-			    //fmt.Println("mode: ", mode)
 			    message = message[1:]
-			    //create and append custom header with original destination port and ip to the message
+			    
+			    //Define original destination port and ip for packet
 			    high, low = split_uint16(3003)
 			    destPort := []byte{high, low}
 			    destIP := []byte{127, 0, 0, 1}
+
+			    //add total length of message to custm header
 			    high, low = split_uint16(uint16(len(message)))
 			    totalLength := []byte{high, low}
+
+			    //Construct the full header: message length, dest ip, dest port, sequence number (uint16), mode
 			    header = append(totalLength, header)
 			    header = append(destIP, header)
 			    header = append(destPort, header)
+			    header = appendOne(header, byte(0))
 			    header = appendOne(header, byte(0))
 			    header = appendOne(header, byte(mode))
 			    fmt.Println("\nCustom Header:")
 			    fmt.Println(header)
 			    fmt.Println("\n")
 		    default:
+			    //we received a packet, but no accompanying message
 			    fmt.Println("no message received")
 			    return
 		    }
 	    }else{
-		header[8] = byte(i)
+		    //set uint16 sequence number in custom header
+		    high, low = split_uint16(uint16(i))
+		    header[8] = high
+		    header[9] = low
 	    }
+
 	    
-	    rawBytes := packet.Data()
-		    
+	    rawBytes := packet.Data()  
 	    
 	    ethHeader :=  rawBytes[:14]
 
@@ -95,30 +110,38 @@ func main() {
 
 	    udpEndIndex := ipEndIndex + 8
 	    udpHeader := rawBytes[ipEndIndex:udpEndIndex]
+
+	    //headers have been stripped from packet, get payload content
 	    payload := rawBytes[udpEndIndex:]
 
-	    //determine how much of the message we can fit in this packet
-	    end = int(math.Ceil(float64(len(payload)) * float64(0.3))) - 10
+	    //determine how much of the message we can fit in this packet (need to account for 11 byte header sent in every packet)
+	    end = int(math.Ceil(float64(len(payload)) * float64(0.3))) - 11
+
 	    var bytesSent int
-	    if end < 1 {
-		    //not enough space to fit any part of message with 9 byte header, so set minimum amount that can be hidden to 8 bytes (18 bytes in total with header
-		    fragment = message[:8]
-		    message = message[8:]
-		    bytesSent = 8
-	    } else if len(message) <= end {
+
+	    //less than 8 bytes are left in message, send them all in this packet
+	    if len(message) <= 8 {
 		    fragment = message
 		    end = 0
 		    i = -1
 		    bytesSent = len(fragment)
 		    message = make([]byte, 0)
+	    } else if end < 8  {
+		     //set minimum amount that can be hidden to 8 bytes (19 bytes in total with header
+		    fragment = message[:8]
+		    message = message[8:]
+		    bytesSent = 8
 	    }else{
+		    //get a portion of the message to be hidden in this payload
 		    fragment = message[:end]
 		    message = message[end:]
 		    bytesSent = end
 	    }
 
+	    //add our custom header to the portion of the message to be hidden
 	    customPacket = append(header, fragment)
-	    
+
+	    //hide the message fragment + header in this packet's payload
 	    newPayload, err := hideMessage(payload, customPacket)
 	    if err != nil {
 		fmt.Println(err)
@@ -130,54 +153,53 @@ func main() {
 	    packet := append(udpHeader, newPayload)
 	    length := uint16(len(packet))
 	    high, low = split_uint16(length)
-
 	    udpHeader[4] = high
 	    udpHeader[5] = low
 
-
+	    //calculate packet length for ip header
 	    packet = append(append(ipHeader, udpHeader), newPayload)
 	    length = uint16(len(packet))
 	    high, low = split_uint16(length)
-
 	    ipHeader[2] = high
 	    ipHeader[3] = low
 
+	    //pseudoheader for udp checksum calculation
 	    psuedoHeader := appendOne(ipHeader[12:], 17)
 	    psuedoHeader = append(psuedoHeader, ipHeader[3:5])
-	    
+
+	    //calculate and set udp checksum
 	    data := append(udpHeader, newPayload)
 	    checksum := udpChecksum(psuedoHeader, data)
 	    high, low = split_uint16(checksum)
-
 	    udpHeader[6] = high
 	    udpHeader[7] = low
 
+	    //calculate and set ip header checksum
 	    checksum = ipChecksum(ipHeader)
 	    high, low = split_uint16(checksum)
-
 	    ipHeader[10] = high
 	    ipHeader[11] = low
 
+	    //all header fields have been calculated/populated, so reconstruct full packet
 	    packet = append(ethHeader, append(append(ipHeader, udpHeader), newPayload))
-	    //fmt.Println("New packet:")
-	    //fmt.Println(packet)
-
 	    
 	    fmt.Printf("***Packet with sequence number %d***\n", sequenceNumber)
 	    fmt.Println("Original Payload:")
 	    fmt.Println(string(payload))
 	    fmt.Printf("\n")
 	    fmt.Printf("New payload with %d bytes of message embedded:\n", bytesSent)
-	    //print the Go-syntax representation of the new string. Escapes newlines/special characters that can't be interpreted (only ascii codes 32-127 are readable characters)
+	    
+	    //print the Go-syntax representation of the new string. Escapes newlines/special characters that can't be interpreted (only ascii codes 32-127 are printable characters)
 	    escapedStr := fmt.Sprintf("%#v\n", string(newPayload))
 	    fmt.Println(escapedStr)
 	    fmt.Println("------------------------------------------\n")
-	    
+
+	    //end of message has been reached and sequence number has been reset
 	    if i == -1 {
 	       fmt.Println("Full Message has been sent.\n")
 	    }
 	    
-
+	    //send packet with hidden message fragment to decoder.go
 	    err = handle.WritePacketData(packet)
 	    if err != nil {
 		    log.Fatal(err)
@@ -227,8 +249,7 @@ func udpChecksum(phdr []byte, data []byte) uint16 {	//compute 16 bit sum of pseu
 	for i := 0; sum32 > 65535; i++{
 		sum32 = ((sum32 & (((1 << 16) - 1) << 16) ) >> 16) + (sum32 & ((1 << 16) - 1))
 	}
-	//fmt.Printf("%x\n", sum32)
-	//fmt.Printf("%d", ^uint16(sum32))
+
 	//return inverse of this 16 bit sum
 	return ^uint16(sum32)
 }
@@ -283,23 +304,24 @@ func hideMessage(data []byte, msg []byte) ([]byte, error) {
 	}
 	dataBinStr := bytesToBin(data)
 	msgBinStr := bytesToBin(msg)
-	
+
+	//generate psuedo-random number sequence, must be same seed as in decoder.go to work
 	rand.Seed(1111)
 	numBits := len(msgBinStr)
 	var randPositions = make([]int, numBits, numBits)
-	
+
+	//get sequence of pseudo-random numbers that each represent a postion in the message where a single bit of data will be inserted
 	for i := 0; i < numBits; i++ {
 		randIndex := rand.Intn(len(dataBinStr) + i)
 		randPositions[i] = randIndex
 	}
 	sort.Ints(randPositions)
-	
+
+	//insert data bit-by-bit in generated positions and return new resulting byte array
 	newStr := dataBinStr
 	for i := 0; i < numBits; i++ {
-		//fmt.Printf("%s, ", newStr)
 		currentBit := msgBinStr[i:i+1]
 		newStr = insertBit(newStr, currentBit, randPositions[i])
-		//fmt.Printf("%d, %s\n", randPositions[i], currentBit)
 	}
 	return appendOne(binToBytes(newStr), byte(len(msg))), nil
 }
