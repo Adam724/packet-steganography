@@ -53,7 +53,8 @@ func main() {
 
 	   buf := new(bytes.Buffer)
 	   err = jpeg.Encode(buf, img, nil)
-	   message = buf.Bytes()
+		message = buf.Bytes()
+		//fmt.Println(message)
 
 	}else{
 	   fmt.Println("Please specify a mode from the options below:\n-m to send a message\n-i to send an image")

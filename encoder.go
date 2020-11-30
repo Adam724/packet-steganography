@@ -168,7 +168,9 @@ func main() {
 	    fmt.Println(string(payload))
 	    fmt.Printf("\n")
 	    fmt.Printf("New payload with %d bytes of message embedded:\n", bytesSent)
-	    fmt.Println(string(newPayload))
+	    //print the Go-syntax representation of the new string. Escapes newlines/special characters that can't be interpreted (only ascii codes 32-127 are readable characters)
+	    escapedStr := fmt.Sprintf("%#v\n", string(newPayload))
+	    fmt.Println(escapedStr)
 	    fmt.Println("------------------------------------------\n")
 	    
 	    if i == -1 {

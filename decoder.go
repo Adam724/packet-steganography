@@ -14,7 +14,6 @@ import (
     //"strings"
     "os"
     "image/jpeg"
-    "image"
     "bytes"
 )
 
@@ -54,7 +53,7 @@ func main() {
 
 	//Buffer to store the individual messages that come in. Each piece of the secret
 	//message will be indexed by its sequence number
-	buffer := make([]byte, 10000)
+	buffer := make([]byte, 0)
 	
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSource.Packets() {
@@ -111,8 +110,9 @@ func main() {
 			   //Print message
 			   fmt.Println(string(buffer))
 			}else if mode == 2 {
+				//fmt.Println(buffer)
 			   //Store image
-			   img, _, err := image.Decode(bytes.NewReader(buffer))
+			   img, err := jpeg.Decode(bytes.NewReader(buffer))
 			   if err != nil {
 			      log.Fatalln(err)
 			   }
