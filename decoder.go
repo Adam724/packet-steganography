@@ -120,7 +120,7 @@ func main() {
 			   defer out.Close()
 
 			   var opts jpeg.Options
-			   opts.Quality = 1
+			   opts.Quality = 100
 
 			   err = jpeg.Encode(out, img, &opts)
 
