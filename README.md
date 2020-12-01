@@ -4,11 +4,15 @@
 Embed weakly encrypted messages in raw packet payloads.
 
 ### Running the Project
-*You must have sudo privledges on your device in order to run these files*
+*You must have have go installed and have sudo privledges on your device in order to run these files.*
 ```sh
-npx create-react-app my-app
-cd my-app
-npm start
+sudo go run client.go <flag> <message>
+```
+```sh
+sudo go run encoder.go
+```
+```sh
+sudo go run decoder.go
 ```
 
 ### Project Overview
