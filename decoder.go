@@ -11,7 +11,6 @@ import (
     "strconv"
     "net"
     "bufio"
-    //"strings"
     "os"
     "image/jpeg"
     "bytes"
@@ -126,7 +125,7 @@ func main() {
 			
 			fmt.Println("------------------------------------------\n\n")
 			currLength = 0
-			buffer = make([]byte, 10000)
+			buffer = make([]byte, 0)
 		}
 
 
