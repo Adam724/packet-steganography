@@ -1,20 +1,20 @@
 package main;
 
-import (
-    "fmt";
-    "github.com/google/gopacket";
-    "github.com/google/gopacket/pcap";
-    "log";
-    "time";
-    "math/rand";
-    "sort";
-    "strconv";
-    "net";
-    "bufio";
-    "os";
-    "image/jpeg";
-    "bytes";
-);
+import ("fmt");
+import ("github.com/google/gopacket");
+import ("github.com/google/gopacket/pcap");
+import ("log");
+import ("time");
+import ("net");
+import ("math/rand");
+import ("sort");
+import ("errors");
+import ("strconv");
+import ("math");
+import ("bytes");
+import ("image/jpeg");
+import ("bufio");
+import ("os");
 
 var (
     device       string = "lo";

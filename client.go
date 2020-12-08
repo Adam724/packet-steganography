@@ -1,27 +1,24 @@
 package main;
 
-import (
-	"github.com/google/gopacket/pcap";
-	"fmt";
-	"log";
-	"time";
-	"os";
-	"net";
-	"bufio";
-	"math";
-	"image/jpeg";
-	"bytes";
-	"image";
-);
+import ("github.com/google/gopacket/pcap");
+import ("fmt");
+import ("log");
+import ("time");
+import ("os");
+import ("net");
+import ("bufio");
+import ("math");
+import ("image/jpeg");
+import ("bytes");
+import ("image");
 
-var (
-    device       string = "lo" ;//loopback device, for local testing
-    snapshot_len int32  = 1024;
-    promiscuous  bool   = false;
-    err          error;
-    timeout      time.Duration = -1 * time.Second;
-    handle       *pcap.Handle;
-);
+
+var device       string = "lo" ;//loopback device, for local testing
+var snapshot_len int32  = 1024;
+var promiscuous  bool   = false;
+var err          error;
+var timeout      time.Duration = -1 * time.Second;
+var handle       *pcap.Handle;
 
 func main() {
 	if len(os.Args) < 3 {
