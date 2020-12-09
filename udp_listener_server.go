@@ -2,8 +2,8 @@ package main;
 import ("fmt");
 import ("net");
 
-
-
+//Required for argo2verilog compiler
+//;
 func main() {
     p := make([]byte, 2048);
     addr := net.UDPAddr{
