@@ -8,7 +8,7 @@ We wanted to develop a way to send ASCII messages and .jpeg files within raw pac
 ```sh
 sudo go run client.go <flag> <message>
 ```
-Sends a message and dummy udp packets to encoder.go. Capable of sending a string or a jpg file to be embedded. Client.go takes two command line arguments. The first is a flag, either -i or -m. If client.go is run with -i, the second command line argument must be a filepath to a jpg image. If -m is specified, the second command line argument must be a string.
+Sends a message and dummy udp packets to encoder.go. Capable of sending a string or a jpg file to be embedded. Client.go takes two command line arguments. The first is a flag, either -i or -m. If client.go is run with -i, the second command line argument must be a filepath to a jpeg image. If -m is specified, the second command line argument must be a string.
 
 ```sh
 go run encoder.go
