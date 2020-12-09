@@ -26,8 +26,3 @@ sudo go run udp_listener_server.go
 **Decoder.go:** Listens for packets from encoder.go. When a packet is received, decoder separates the dummy packet from the message fragment that was embedded within it. Decoder adds the message fragment to a buffer, ordered by the fragment's sequence number, and forwards the original dummy packet to that packet's destination, found within the udp header.
 
 **Udp_listener_server.go:** Listens for packets from decoder.go. This is where the original dummy packets are routed to once the message fragments are extracted within the decoder.
-
-## Next Steps
-**NAT Table:** It would make the project a lot more robust if one were to design a NAT table that routes udp packets to encoder.go. This way, encoder.go would have naturally generated packets to embed the hidden message in, rather than dummy packets that have identical payloads.
-
-**Encryption:** Currently, this project implements weak encryption. It embeds the messages in the payloads by using a random number generator with a specific seed to find random positions in the payload to place the bits of a message fragment. One way to improve the encryption process would be to encrypt the message fragment before placing it into the packet payload. Another way to improve upon encryption would be to add random arbitrary bits to the udp payload, and having decoder.go filter these random bits out. This would make it more difficult for attackers to determine what bits are part of the hidden message vs. the orignal payload.
