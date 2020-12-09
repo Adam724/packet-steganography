@@ -26,3 +26,6 @@ sudo go run udp_listener_server.go
 **Decoder.go:** Listens for packets from encoder.go. When a packet is received, decoder separates the dummy packet from the message fragment that was embedded within it. Decoder adds the message fragment to a buffer, ordered by the fragment's sequence number, and forwards the original dummy packet to that packet's destination, found within the udp header.
 
 **Udp_listener_server.go:** Listens for packets from decoder.go. This is where the original dummy packets are routed to once the message fragments are extracted within the decoder.
+
+![alt text](https://github.com/[Adam724]/[packet-steganography]/blob/[master]/architecture.png?raw=true)
+
