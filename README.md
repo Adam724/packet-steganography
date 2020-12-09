@@ -27,5 +27,5 @@ sudo go run udp_listener_server.go
 
 **Udp_listener_server.go:** Listens for packets from decoder.go. This is where the original dummy packets are routed to once the message fragments are extracted within the decoder.
 
-![alt text](https://github.com/[Adam724]/[packet-steganography]/blob/[master]/architecture.png?raw=true)
+![Project Architecture](https://github.com/Adam724/packet-steganography/blob/master/architecture.png?raw=true)
 
