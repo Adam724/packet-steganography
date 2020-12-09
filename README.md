@@ -18,7 +18,7 @@ Receives a message and dummy packets from client.go. Encoder generates a small h
 ```sh
 go run decoder.go
 ```
-Listens for packets from encoder.go. When a packet is received, decoder separates the dummy packet from the message fragment that was embedded within it. Decoder adds the message fragment to a buffer, ordered by the fragment's sequence number, and forwards the original dummy packet to that packet's destination, found within the udp header.
+Listens for packets from encoder.go. When a packet is received, decoder separates the dummy packet from the message fragment that was embedded within it. Decoder adds the message fragment to a buffer, ordered by the fragment's sequence number, and forwards the original dummy packet to that packet's destination, found within the udp header. Once the entire message is decoded, decoder.go will print the message if the message sent was an ASCII message or save the message as "img.jpeg" if an image was communicated.
 
 ```sh
 go run udp_listener_server.go
