@@ -1,7 +1,7 @@
 # Raw Packet Steganography
 
 ## Motivation
-Embed weakly encrypted messages in raw packet payloads.
+We wanted to develop a way to send ASCII messages and .jpeg files within raw packet payloads. Embedding messages in raw packet payloads would act as a method of secretive communication between two hosts. To make the messages harder to decypher, we wanted to implement a form of encryption so that attackers or firewalls would have a harder time piecing the original message together.
 
 ## Running the Project
 *You must have have go installed and have sudo privledges on your device in order to run these files.*
